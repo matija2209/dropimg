@@ -8,6 +8,20 @@ import { join } from 'node:path';
 
 const imagesRoute = new Hono();
 
+// List all images
+imagesRoute.get('/', async (c) => {
+  const allImages = await db.query.images.findMany({
+    orderBy: (images, { desc }) => [desc(images.createdAt)],
+  });
+
+  return c.json(
+    allImages.map((image) => ({
+      ...image,
+      directUrl: storage.publicUrl(image.filename),
+    }))
+  );
+});
+
 // Get metadata
 imagesRoute.get('/:id', async (c) => {
   const id = c.req.param('id');
