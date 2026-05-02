@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, Copy, Check, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Upload, Copy, Check, Trash2, Image as ImageIcon, Type } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface UploadResponse {
@@ -14,6 +14,7 @@ export const Uploader: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<UploadResponse | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [altName, setAltName] = useState('');
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -56,6 +57,7 @@ export const Uploader: React.FC = () => {
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', fileToUpload);
+    formData.append('altName', altName);
 
     try {
       const response = await fetch('/api/upload', {
@@ -85,7 +87,7 @@ export const Uploader: React.FC = () => {
     return (
       <div className="w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
         <div className="mb-6 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-          <img src={result.directUrl} alt="Uploaded" className="w-full h-auto max-h-96 object-contain bg-gray-50 dark:bg-gray-900" />
+          <img src={result.directUrl} alt={altName || "Uploaded"} className="w-full h-auto max-h-96 object-contain bg-gray-50 dark:bg-gray-900" />
         </div>
 
         <div className="space-y-4">
@@ -102,8 +104,8 @@ export const Uploader: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Markdown</label>
             <div className="flex gap-2">
-              <input readOnly value={`![Image](${result.directUrl})`} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
-              <button onClick={() => copyToClipboard(`![Image](${result.directUrl})`, 'md')} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+              <input readOnly value={`![${altName || 'Image'}](${result.directUrl})`} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
+              <button onClick={() => copyToClipboard(`![${altName || 'Image'}](${result.directUrl})`, 'md')} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                 {copied === 'md' ? <Check size={18} /> : <Copy size={18} />}
               </button>
             </div>
@@ -111,7 +113,7 @@ export const Uploader: React.FC = () => {
 
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <div className="flex gap-4 items-center">
-              <button onClick={() => { setResult(null); }} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+              <button onClick={() => { setResult(null); setAltName(''); }} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
                 Upload another
               </button>
               <Link to="/assets" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
@@ -129,6 +131,21 @@ export const Uploader: React.FC = () => {
 
   return (
     <div className="w-full max-w-2xl flex flex-col gap-4">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-400">
+            <Type size={20} />
+          </div>
+          <input 
+            type="text" 
+            placeholder="Image Alt Name (optional)" 
+            value={altName}
+            onChange={(e) => setAltName(e.target.value)}
+            className="flex-1 bg-transparent border-none focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400"
+          />
+        </div>
+      </div>
+
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}

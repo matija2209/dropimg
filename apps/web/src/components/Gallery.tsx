@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ExternalLink, Calendar, HardDrive } from 'lucide-react';
+import { ExternalLink, Calendar, HardDrive, Copy, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface ImageAsset {
   id: string;
   filename: string;
+  altName: string | null;
   mimeType: string;
   size: number;
   createdAt: string;
@@ -14,6 +15,7 @@ interface ImageAsset {
 export const Gallery: React.FC = () => {
   const [images, setImages] = useState<ImageAsset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchImages = async () => {
     try {
@@ -31,6 +33,12 @@ export const Gallery: React.FC = () => {
   useEffect(() => {
     fetchImages();
   }, []);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -71,26 +79,43 @@ export const Gallery: React.FC = () => {
               <div className="aspect-video bg-gray-50 dark:bg-gray-900 relative overflow-hidden">
                 <img 
                   src={image.directUrl} 
-                  alt={image.filename} 
+                  alt={image.altName || image.filename} 
                   className="w-full h-full object-cover transition-transform group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                  <a 
-                    href={image.directUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                  <Link 
+                    to={`/i/${image.id}`}
                     className="p-2 bg-white rounded-full text-gray-900 hover:bg-gray-100 transition"
-                    title="View Original"
+                    title="View Details"
                   >
-                    <ExternalLink size={20} />
-                  </a>
+                    <ExternalLink size={18} />
+                  </Link>
+                  <button 
+                    onClick={() => copyToClipboard(image.directUrl, `${image.id}-url`)}
+                    className="p-2 bg-white rounded-full text-gray-900 hover:bg-gray-100 transition"
+                    title="Copy URL"
+                  >
+                    {copiedId === `${image.id}-url` ? <Check size={18} /> : <Copy size={18} />}
+                  </button>
+                  <button 
+                    onClick={() => copyToClipboard(`![${image.altName || 'Image'}](${image.directUrl})`, `${image.id}-md`)}
+                    className="p-2 bg-white rounded-full text-gray-900 hover:bg-gray-100 transition font-bold text-xs"
+                    title="Copy Markdown"
+                  >
+                    {copiedId === `${image.id}-md` ? <Check size={18} /> : 'MD'}
+                  </button>
                 </div>
               </div>
               
               <div className="p-4 flex-1 flex flex-col">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate mb-2" title={image.filename}>
-                  {image.filename}
-                </p>
+                <Link to={`/i/${image.id}`} className="hover:text-blue-600 transition">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate mb-1" title={image.altName || image.filename}>
+                    {image.altName || image.filename}
+                  </p>
+                  {image.altName && (
+                    <p className="text-xs text-gray-400 truncate mb-2">{image.filename}</p>
+                  )}
+                </Link>
                 
                 <div className="mt-auto space-y-1">
                   <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">

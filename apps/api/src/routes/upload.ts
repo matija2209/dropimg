@@ -8,6 +8,7 @@ const upload = new Hono();
 upload.post('/', async (c) => {
   const body = await c.req.parseBody();
   const file = body['file'] as File;
+  const altName = body['altName'] as string;
 
   if (!file) {
     return c.json({ error: 'No file uploaded' }, 400);
@@ -38,6 +39,7 @@ upload.post('/', async (c) => {
   await db.insert(images).values({
     id,
     filename,
+    altName: altName || null,
     mimeType: file.type,
     size: file.size,
     deleteToken,

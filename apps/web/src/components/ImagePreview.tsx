@@ -1,0 +1,148 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { Copy, Check, ExternalLink, Calendar, HardDrive, ArrowLeft } from 'lucide-react';
+
+interface ImageAsset {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  directUrl: string;
+}
+
+export const ImagePreview: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const [image, setImage] = useState<ImageAsset | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchImage = async () => {
+      try {
+        const response = await fetch(`/api/images/${id}`);
+        if (!response.ok) throw new Error('Image not found');
+        const data = await response.json();
+        setImage(data);
+      } catch (error) {
+        console.error('Error fetching image:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchImage();
+  }, [id]);
+
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(type);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!image) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Image not found</h2>
+        <Link to="/assets" className="text-blue-600 hover:underline flex items-center justify-center gap-2">
+          <ArrowLeft size={16} /> Back to Gallery
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-4xl">
+      <Link to="/assets" className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition mb-6">
+        <ArrowLeft size={18} />
+        Back to Gallery
+      </Link>
+
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="p-4 bg-gray-50 dark:bg-gray-900 flex justify-center items-center min-h-[300px]">
+          <img 
+            src={image.directUrl} 
+            alt={image.filename} 
+            className="max-w-full h-auto max-h-[70vh] rounded shadow-sm"
+          />
+        </div>
+
+        <div className="p-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2 truncate max-w-md">
+                {image.filename}
+              </h2>
+              <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400">
+                <span className="flex items-center gap-1.5"><Calendar size={14} /> {new Date(image.createdAt).toLocaleDateString()}</span>
+                <span className="flex items-center gap-1.5"><HardDrive size={14} /> {formatSize(image.size)}</span>
+                <span className="uppercase">{image.mimeType.split('/')[1]}</span>
+              </div>
+            </div>
+            <a 
+              href={image.directUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition font-medium"
+            >
+              <ExternalLink size={18} />
+              Open Original
+            </a>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Direct URL</label>
+              <div className="flex gap-2">
+                <input 
+                  readOnly 
+                  value={image.directUrl} 
+                  className="flex-1 p-3 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                />
+                <button 
+                  onClick={() => copyToClipboard(image.directUrl, 'direct')} 
+                  className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-sm active:scale-95"
+                >
+                  {copied === 'direct' ? <Check size={20} /> : <Copy size={20} />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Markdown Code</label>
+              <div className="flex gap-2">
+                <input 
+                  readOnly 
+                  value={`![${image.filename}](${image.directUrl})`} 
+                  className="flex-1 p-3 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                />
+                <button 
+                  onClick={() => copyToClipboard(`![${image.filename}](${image.directUrl})`, 'md')} 
+                  className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-sm active:scale-95"
+                >
+                  {copied === 'md' ? <Check size={20} /> : <Copy size={20} />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
