@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, ExternalLink, Calendar, HardDrive } from 'lucide-react';
+import { ExternalLink, Calendar, HardDrive } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface ImageAsset {

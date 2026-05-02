@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { Uploader } from './components/Uploader';
 import { Gallery } from './components/Gallery';
-import { Layout } from 'lucide-react';
 
 function App() {
   return (
