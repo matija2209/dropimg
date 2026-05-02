@@ -109,9 +109,14 @@ export const Uploader: React.FC = () => {
           </div>
 
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-            <button onClick={() => { setResult(null); }} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-              Upload another
-            </button>
+            <div className="flex gap-4 items-center">
+              <button onClick={() => { setResult(null); }} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                Upload another
+              </button>
+              <a href="/assets" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                View all assets
+              </a>
+            </div>
             <a href={result.deleteUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700">
               <Trash2 size={16} /> Delete image
             </a>
