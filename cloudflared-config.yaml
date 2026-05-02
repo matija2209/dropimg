@@ -1,0 +1,7 @@
+tunnel: 9e396975-99a6-4af3-9e4a-e4aff1bb50f8
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: img.buildwithmatija.com
+    service: http://localhost:12312
+  - service: http_status:404
