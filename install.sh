@@ -9,6 +9,15 @@ echo "==============================================="
 echo "🚀 Starting DropImg One-Click Deployment"
 echo "==============================================="
 
+# Function to find the next available port
+find_available_port() {
+    local port=$1
+    while lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; do
+        port=$((port + 1))
+    done
+    echo $port
+}
+
 # 1. Install Docker if missing
 if ! command -v docker &> /dev/null; then
     echo "🐳 Docker not found. Installing Docker..."
@@ -26,16 +35,22 @@ echo "⚙️  Basic Configuration Setup"
 
 # Try to get Public IP
 PUBLIC_IP=$(curl -s --max-time 2 https://ifconfig.me || echo "localhost")
+# Wrap IPv6 in brackets if needed
+if [[ "$PUBLIC_IP" =~ : ]]; then
+    IP_URL_BASE="[$PUBLIC_IP]"
+else
+    IP_URL_BASE="$PUBLIC_IP"
+fi
 
 read -p "Enter the App Name [DropImg]: " APP_NAME
 APP_NAME=${APP_NAME:-DropImg}
-# Slugify APP_NAME for project name
 APP_SLUG=$(echo "$APP_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g')
 
-read -p "Enter the port to expose the app on [12312]: " APP_PORT
-APP_PORT=${APP_PORT:-12312}
+SUGGESTED_APP_PORT=$(find_available_port 12312)
+read -p "Enter the port to expose the app on [$SUGGESTED_APP_PORT]: " APP_PORT
+APP_PORT=${APP_PORT:-$SUGGESTED_APP_PORT}
 
-DEFAULT_URL="http://$PUBLIC_IP:$APP_PORT"
+DEFAULT_URL="http://$IP_URL_BASE:$APP_PORT"
 read -p "Enter your public domain/URL [$DEFAULT_URL]: " APP_URL
 APP_URL=${APP_URL:-$DEFAULT_URL}
 
@@ -48,10 +63,13 @@ fi
 # Storage Port Configuration
 echo ""
 echo "📦 Storage Port Configuration (for internal S3/Garage)"
-read -p "Garage S3 Port [3900]: " GARAGE_S3_PORT
-GARAGE_S3_PORT=${GARAGE_S3_PORT:-3900}
-read -p "Garage RPC Port [3903]: " GARAGE_RPC_PORT
-GARAGE_RPC_PORT=${GARAGE_RPC_PORT:-3903}
+SUGGESTED_S3_PORT=$(find_available_port 3900)
+read -p "Garage S3 Port [$SUGGESTED_S3_PORT]: " GARAGE_S3_PORT
+GARAGE_S3_PORT=${GARAGE_S3_PORT:-$SUGGESTED_S3_PORT}
+
+SUGGESTED_RPC_PORT=$(find_available_port 3903)
+read -p "Garage RPC Port [$SUGGESTED_RPC_PORT]: " GARAGE_RPC_PORT
+GARAGE_RPC_PORT=${GARAGE_RPC_PORT:-$SUGGESTED_RPC_PORT}
 
 # Cloudflare Tunnel Option
 echo ""
@@ -85,7 +103,9 @@ GARAGE_RPC_PORT=$GARAGE_RPC_PORT
 EOF
 
 # Update cloudflared-config.yaml hostname if needed
-DOMAIN_ONLY=$(echo "$APP_URL" | sed -e 's|^[^/]*//||' -e 's|/.*$||' -e 's|:.*$||')
+# Better domain extraction (handles IPv6 brackets and ports)
+DOMAIN_ONLY=$(echo "$APP_URL" | sed -E 's|^.*://||; s|/.*$||; s|\[?([^]]+)\]?(:.*)?|\1|')
+
 if [ -f cloudflared-config.yaml ]; then
     echo "☁️  Syncing Cloudflare Tunnel hostname to: $DOMAIN_ONLY"
     sed -i "s/hostname: .*/hostname: $DOMAIN_ONLY/" cloudflared-config.yaml
