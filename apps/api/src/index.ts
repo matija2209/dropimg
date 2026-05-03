@@ -5,9 +5,6 @@ import { logger } from 'hono/logger';
 import { config, storage } from './config.js';
 import upload from './routes/upload.js';
 import imagesRoute from './routes/images.js';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
 import { serveStatic } from '@hono/node-server/serve-static';
 
 const app = new Hono();
@@ -21,9 +18,9 @@ app.use('/*', serveStatic({ root: './public' }));
 app.route('/api/upload', upload);
 app.route('/api/images', imagesRoute);
 
-// Serve raw images
-app.get('/raw/:filename', async (c) => {
-  const filename = c.req.param('filename');
+// Serve raw storage objects for backward compatibility.
+app.get('/raw/*', async (c) => {
+  const filename = decodeURIComponent(c.req.path.replace(/^\/raw\//, ''));
 
   try {
     const { body, mimeType } = await storage.get(filename);

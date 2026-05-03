@@ -5,6 +5,7 @@ import * as schema from './schema.js';
 import { join } from 'node:path';
 
 const sqlite = new Database(process.env.DATABASE_URL?.replace('file:', '') || 'app.sqlite');
+sqlite.pragma('foreign_keys = ON');
 export const db = drizzle(sqlite, { schema });
 
 // Automatically run migrations

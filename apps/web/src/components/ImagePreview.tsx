@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Copy, Check, ExternalLink, Calendar, HardDrive, ArrowLeft } from 'lucide-react';
+import { formatDimensions, formatSize, getDisplayName, getPrimaryViewUrl, type ImageAsset } from '../lib/images';
 
-interface ImageAsset {
-  id: string;
-  filename: string;
-  mimeType: string;
-  size: number;
-  createdAt: string;
-  directUrl: string;
-}
+type RenditionEntry = {
+  key: string;
+  label: string;
+  rendition: ImageAsset['original'];
+};
 
 export const ImagePreview: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,13 +38,25 @@ export const ImagePreview: React.FC = () => {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
+  const renditionEntries: RenditionEntry[] = image
+    ? [
+        { key: 'original', label: 'Original', rendition: image.original },
+        { key: 'thumbnail', label: 'Thumbnail', rendition: image.variants.thumbnail },
+        { key: 'card', label: 'Card', rendition: image.variants.card },
+        { key: 'tablet', label: 'Tablet', rendition: image.variants.tablet },
+        { key: 'social', label: 'Social', rendition: image.variants.social },
+      ].reduce<RenditionEntry[]>((entries, entry) => {
+        if (entry.rendition) {
+          entries.push({
+            key: entry.key,
+            label: entry.label,
+            rendition: entry.rendition,
+          });
+        }
+
+        return entries;
+      }, [])
+    : [];
 
   if (isLoading) {
     return (
@@ -77,8 +87,8 @@ export const ImagePreview: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="p-4 bg-gray-50 dark:bg-gray-900 flex justify-center items-center min-h-[300px]">
           <img 
-            src={image.directUrl} 
-            alt={image.filename} 
+            src={getPrimaryViewUrl(image)} 
+            alt={getDisplayName(image)} 
             className="max-w-full h-auto max-h-[70vh] rounded shadow-sm"
           />
         </div>
@@ -87,12 +97,14 @@ export const ImagePreview: React.FC = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2 truncate max-w-md">
-                {image.filename}
+                {getDisplayName(image)}
               </h2>
               <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1.5"><Calendar size={14} /> {new Date(image.createdAt).toLocaleDateString()}</span>
                 <span className="flex items-center gap-1.5"><HardDrive size={14} /> {formatSize(image.size)}</span>
                 <span className="uppercase">{image.mimeType.split('/')[1]}</span>
+                {formatDimensions(image.width, image.height) && <span>{formatDimensions(image.width, image.height)}</span>}
+                {image.isAnimated && <span>Animated</span>}
               </div>
             </div>
             <a 
@@ -129,15 +141,48 @@ export const ImagePreview: React.FC = () => {
               <div className="flex gap-2">
                 <input 
                   readOnly 
-                  value={`![${image.filename}](${image.directUrl})`} 
+                  value={`![${getDisplayName(image)}](${image.directUrl})`} 
                   className="flex-1 p-3 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                 />
                 <button 
-                  onClick={() => copyToClipboard(`![${image.filename}](${image.directUrl})`, 'md')} 
+                  onClick={() => copyToClipboard(`![${getDisplayName(image)}](${image.directUrl})`, 'md')} 
                   className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-sm active:scale-95"
                 >
                   {copied === 'md' ? <Check size={20} /> : <Copy size={20} />}
                 </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Available Renditions</label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {renditionEntries.map((entry) => (
+                  <div key={entry.key} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-gray-900 dark:text-white">{entry.label}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {[formatDimensions(entry.rendition.width, entry.rendition.height), formatSize(entry.rendition.size), entry.rendition.mimeType.split('/')[1].toUpperCase()].filter(Boolean).join(' • ')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(entry.rendition.url, entry.key)}
+                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                      >
+                        {copied === entry.key ? <Check size={18} /> : <Copy size={18} />}
+                      </button>
+                    </div>
+                    <a
+                      href={entry.rendition.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <ExternalLink size={16} />
+                      Open rendition
+                    </a>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

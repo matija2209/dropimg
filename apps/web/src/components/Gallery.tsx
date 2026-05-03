@@ -1,16 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ExternalLink, Calendar, HardDrive, Copy, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-interface ImageAsset {
-  id: string;
-  filename: string;
-  altName: string | null;
-  mimeType: string;
-  size: number;
-  createdAt: string;
-  directUrl: string;
-}
+import { formatDimensions, formatSize, getDisplayName, getPreviewUrl, type ImageAsset } from '../lib/images';
 
 export const Gallery: React.FC = () => {
   const [images, setImages] = useState<ImageAsset[]>([]);
@@ -38,14 +29,6 @@ export const Gallery: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   if (isLoading) {
@@ -78,8 +61,8 @@ export const Gallery: React.FC = () => {
             <div key={image.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col group">
               <div className="aspect-video bg-gray-50 dark:bg-gray-900 relative overflow-hidden">
                 <img 
-                  src={image.directUrl} 
-                  alt={image.altName || image.filename} 
+                  src={getPreviewUrl(image)} 
+                  alt={getDisplayName(image)} 
                   className="w-full h-full object-cover transition-transform group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
@@ -98,7 +81,7 @@ export const Gallery: React.FC = () => {
                     {copiedId === `${image.id}-url` ? <Check size={18} /> : <Copy size={18} />}
                   </button>
                   <button 
-                    onClick={() => copyToClipboard(`![${image.altName || 'Image'}](${image.directUrl})`, `${image.id}-md`)}
+                    onClick={() => copyToClipboard(`![${getDisplayName(image)}](${image.directUrl})`, `${image.id}-md`)}
                     className="p-2 bg-white rounded-full text-gray-900 hover:bg-gray-100 transition font-bold text-xs"
                     title="Copy Markdown"
                   >
@@ -109,12 +92,12 @@ export const Gallery: React.FC = () => {
               
               <div className="p-4 flex-1 flex flex-col">
                 <Link to={`/i/${image.id}`} className="hover:text-blue-600 transition">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate mb-1" title={image.altName || image.filename}>
-                    {image.altName || image.filename}
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate mb-1" title={getDisplayName(image)}>
+                    {getDisplayName(image)}
                   </p>
-                  {image.altName && (
-                    <p className="text-xs text-gray-400 truncate mb-2">{image.filename}</p>
-                  )}
+                  <p className="text-xs text-gray-400 truncate mb-2">
+                    {image.isAnimated ? 'Animated original only' : 'Original + web variants'}
+                  </p>
                 </Link>
                 
                 <div className="mt-auto space-y-1">
@@ -126,6 +109,11 @@ export const Gallery: React.FC = () => {
                     <HardDrive size={14} />
                     {formatSize(image.size)} • {image.mimeType.split('/')[1].toUpperCase()}
                   </div>
+                  {formatDimensions(image.width, image.height) && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {formatDimensions(image.width, image.height)}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

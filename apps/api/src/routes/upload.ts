@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { db } from '../db/client.js';
-import { images } from '../db/schema.js';
+import { imageVariants, images } from '../db/schema.js';
 import { storage, config } from '../config.js';
+import { serializeImageAsset } from '../lib/image-assets.js';
+import { processAndStoreImage } from '../services/image-processing.js';
 
 const upload = new Hono();
 
@@ -24,31 +26,75 @@ upload.post('/', async (c) => {
 
   const id = Math.random().toString(36).substring(2, 10);
   const deleteToken = Math.random().toString(36).substring(2, 15);
-  const extension = file.name.split('.').pop();
-  const filename = `${id}.${extension}`;
-
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-
-  const storedFile = await storage.put({
-    key: filename,
-    body: buffer,
-    mimeType: file.type,
-  });
-
-  await db.insert(images).values({
+  const processed = await processAndStoreImage({
     id,
-    filename,
-    altName: altName || null,
+    fileName: file.name,
     mimeType: file.type,
-    size: file.size,
-    deleteToken,
-    createdAt: new Date(),
+    buffer,
+    storage,
   });
+
+  try {
+    db.transaction((tx) => {
+      tx.insert(images).values({
+        id,
+        filename: processed.original.storageKey,
+        altName: altName || null,
+        mimeType: processed.original.mimeType,
+        size: processed.original.size,
+        width: processed.original.width,
+        height: processed.original.height,
+        isAnimated: processed.isAnimated,
+        deleteToken,
+        createdAt: new Date(),
+      }).run();
+
+      if (processed.variants.length > 0) {
+        tx.insert(imageVariants).values(
+          processed.variants.map((variant) => ({
+            imageId: id,
+            variant: variant.variant,
+            storageKey: variant.storageKey,
+            mimeType: variant.mimeType,
+            size: variant.size,
+            width: variant.width,
+            height: variant.height,
+          }))
+        ).run();
+      }
+    });
+  } catch (error) {
+    await Promise.allSettled([
+      storage.delete(processed.original.storageKey),
+      ...processed.variants.map((variant) => storage.delete(variant.storageKey)),
+    ]);
+    throw error;
+  }
 
   return c.json({
-    id,
-    directUrl: storedFile.url,
+    ...serializeImageAsset({
+      id,
+      filename: processed.original.storageKey,
+      altName: altName || null,
+      mimeType: processed.original.mimeType,
+      size: processed.original.size,
+      width: processed.original.width,
+      height: processed.original.height,
+      isAnimated: processed.isAnimated,
+      deleteToken,
+      createdAt: new Date(),
+      variants: processed.variants.map((variant) => ({
+        imageId: id,
+        variant: variant.variant,
+        storageKey: variant.storageKey,
+        mimeType: variant.mimeType,
+        size: variant.size,
+        width: variant.width,
+        height: variant.height,
+      })),
+    }),
     pageUrl: `${config.appUrl}/i/${id}`,
     deleteUrl: `${config.appUrl}/api/images/${id}?token=${deleteToken}`,
   });

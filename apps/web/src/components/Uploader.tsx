@@ -1,10 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import { Upload, Copy, Check, Trash2, Image as ImageIcon, Type } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { formatDimensions, formatSize, getDisplayName, getPreviewUrl } from '../lib/images';
+import type { ImageAsset } from '../lib/images';
 
-interface UploadResponse {
-  id: string;
-  directUrl: string;
+interface UploadResponse extends ImageAsset {
   pageUrl: string;
   deleteUrl: string;
 }
@@ -83,29 +83,49 @@ export const Uploader: React.FC = () => {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const copyOptions = [
+    { id: 'direct', label: 'Original URL', value: result?.directUrl || '' },
+    { id: 'tablet', label: 'Tablet URL', value: result?.variants.tablet?.url || '' },
+    { id: 'social', label: 'Social URL', value: result?.variants.social?.url || '' },
+  ].filter((option) => option.value);
+
   if (result) {
     return (
       <div className="w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
         <div className="mb-6 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-          <img src={result.directUrl} alt={altName || "Uploaded"} className="w-full h-auto max-h-96 object-contain bg-gray-50 dark:bg-gray-900" />
+          <img src={getPreviewUrl(result)} alt={getDisplayName(result)} className="w-full h-auto max-h-96 object-contain bg-gray-50 dark:bg-gray-900" />
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Direct URL</label>
-            <div className="flex gap-2">
-              <input readOnly value={result.directUrl} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
-              <button onClick={() => copyToClipboard(result.directUrl, 'direct')} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
-                {copied === 'direct' ? <Check size={18} /> : <Copy size={18} />}
-              </button>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-4 text-sm text-gray-600 dark:text-gray-300">
+            <div className="font-medium text-gray-900 dark:text-gray-100">{getDisplayName(result)}</div>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+              <span>{formatSize(result.original.size)}</span>
+              <span>{result.original.mimeType.split('/')[1].toUpperCase()}</span>
+              {formatDimensions(result.original.width, result.original.height) && (
+                <span>{formatDimensions(result.original.width, result.original.height)}</span>
+              )}
+              {result.isAnimated && <span>Animated</span>}
             </div>
           </div>
+
+          {copyOptions.map((option) => (
+            <div key={option.id}>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{option.label}</label>
+              <div className="flex gap-2">
+                <input readOnly value={option.value} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
+                <button onClick={() => copyToClipboard(option.value, option.id)} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+                  {copied === option.id ? <Check size={18} /> : <Copy size={18} />}
+                </button>
+              </div>
+            </div>
+          ))}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Markdown</label>
             <div className="flex gap-2">
-              <input readOnly value={`![${altName || 'Image'}](${result.directUrl})`} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
-              <button onClick={() => copyToClipboard(`![${altName || 'Image'}](${result.directUrl})`, 'md')} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+              <input readOnly value={`![${getDisplayName(result)}](${result.directUrl})`} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
+              <button onClick={() => copyToClipboard(`![${getDisplayName(result)}](${result.directUrl})`, 'md')} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                 {copied === 'md' ? <Check size={18} /> : <Copy size={18} />}
               </button>
             </div>
@@ -121,7 +141,7 @@ export const Uploader: React.FC = () => {
               </Link>
             </div>
             <a href={result.deleteUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700">
-              <Trash2 size={16} /> Delete image
+              <Trash2 size={16} /> Delete asset
             </a>
           </div>
         </div>

@@ -15,6 +15,13 @@
       "when": 1777796513183,
       "tag": "0001_long_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777797488065,
+      "tag": "0002_hot_ikaris",
+      "breakpoints": true
     }
   ]
 }
