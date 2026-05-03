@@ -36,6 +36,13 @@ cd dropimg
 
 Once finished, your app will be live at the URL you configured!
 
+### Uninstallation
+To remove the application and stop all services:
+```bash
+./uninstall.sh
+```
+The script will ask if you want to preserve or delete your uploaded images and configuration.
+
 ---
 
 ## ✨ Features
