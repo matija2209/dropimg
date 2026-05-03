@@ -9,27 +9,32 @@ It follows a modern "single app" architecture, combining a React frontend with a
 
 ## 🚀 Quick Start
 
-The fastest way to get started is using Docker Compose. Follow these **3 steps** exactly:
+DropImg is designed to be deployed with **zero local dependencies**. You do NOT need Node.js, npm, or a database installed on your VPS. Docker handles everything.
 
-1. **Initialize Garage Config:**
-   Generates unique secrets for your S3 storage.
-   ```bash
-   ./scripts/init-garage-config.sh
-   ```
+### Prerequisites
+- A Linux VPS (Ubuntu/Debian recommended)
+- `git` and `curl` installed
 
-2. **Start the Stack:**
-   Builds the Node image and starts the services.
-   ```bash
-   docker compose up -d
-   ```
+### One-Click Installation
+```bash
+git clone https://github.com/yourusername/dropimg.git
+cd dropimg
+./install.sh
+```
 
-3. **Setup S3 Resources:**
-   Configures the Garage layout, creates the bucket, and generates access keys.
-   ```bash
-   ./scripts/setup-garage-resources.sh
-   ```
+### What the script does:
+1. **Docker Check:** Automatically installs Docker and Docker Compose if they aren't found.
+2. **Interactive Configuration:** Prompts you for:
+   - **App Name:** Custom branding for your instance.
+   - **Port:** Choose which port to expose (default `12312`).
+   - **Public URL:** Automatically detects your VPS Public IP to suggest a default (e.g., `http://1.2.3.4:12312`).
+   - **Admin Token:** Secure token for administrative actions (can be auto-generated).
+   - **Cloudflare Tunnel:** Optional setup for exposing your instance securely via Cloudflare.
+3. **Storage Provisioning:** Initializes **Garage S3**, creates the `dropimg` bucket, and generates access keys.
+4. **Environment Setup:** Creates a `.env` file with all your settings.
+5. **Launch:** Starts all containers in the background.
 
-Access the UI at: **`http://localhost:12312`**
+Once finished, your app will be live at the URL you configured!
 
 ---
 

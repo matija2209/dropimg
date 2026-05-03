@@ -1,0 +1,134 @@
+#!/bin/bash
+set -e
+
+# ==============================================================================
+# DropImg One-Click VPS Deployment Script
+# ==============================================================================
+
+echo "==============================================="
+echo "🚀 Starting DropImg One-Click Deployment"
+echo "==============================================="
+
+# 1. Install Docker if missing
+if ! command -v docker &> /dev/null; then
+    echo "🐳 Docker not found. Installing Docker..."
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh
+    rm get-docker.sh
+    echo "✅ Docker installed."
+else
+    echo "✅ Docker is already installed."
+fi
+
+# 2. Gather Configuration
+echo ""
+echo "⚙️  Basic Configuration Setup"
+
+# Try to get Public IP
+PUBLIC_IP=$(curl -s --max-time 2 https://ifconfig.me || echo "localhost")
+
+read -p "Enter the App Name [DropImg]: " APP_NAME
+APP_NAME=${APP_NAME:-DropImg}
+
+read -p "Enter the port to expose the app on [12312]: " APP_PORT
+APP_PORT=${APP_PORT:-12312}
+
+DEFAULT_URL="http://$PUBLIC_IP:$APP_PORT"
+read -p "Enter your public domain/URL [$DEFAULT_URL]: " APP_URL
+APP_URL=${APP_URL:-$DEFAULT_URL}
+
+read -p "Enter a secure Admin Token (for deleting images) [press Enter to generate]: " ADMIN_TOKEN
+if [ -z "$ADMIN_TOKEN" ]; then
+    ADMIN_TOKEN=$(openssl rand -hex 16)
+    echo "   Generated Admin Token: $ADMIN_TOKEN"
+fi
+
+# Cloudflare Tunnel Option
+echo ""
+read -p "Do you want to enable Cloudflare Tunnel? (y/N): " ENABLE_TUNNEL
+ENABLE_TUNNEL=${ENABLE_TUNNEL:-n}
+
+# 3. Setup Garage (S3 Backend) Config
+echo ""
+echo "🔧 Initializing Garage Storage Configuration..."
+mkdir -p docker/garage/config
+mkdir -p docker/garage/data/meta
+mkdir -p docker/garage/data/data
+
+GARAGE_RPC_SECRET=$(openssl rand -hex 32)
+GARAGE_ADMIN_TOKEN=$(openssl rand -hex 32)
+
+sed "s/\${GARAGE_RPC_SECRET}/$GARAGE_RPC_SECRET/g; s/\${GARAGE_ADMIN_TOKEN}/$GARAGE_ADMIN_TOKEN/g" \
+    docker/garage/config/garage.toml.template > docker/garage/config/garage.toml
+
+# 4. Generate Initial .env
+echo ""
+echo "📝 Writing environment variables to .env..."
+cat <<EOF > .env
+APP_NAME=$APP_NAME
+APP_PORT=$APP_PORT
+APP_URL=$APP_URL
+ADMIN_TOKEN=$ADMIN_TOKEN
+EOF
+
+# 5. Start Services (Garage needs to be running to create bucket/keys)
+echo ""
+echo "🚀 Starting Garage storage engine..."
+docker compose up -d garage
+
+GARAGE_BIN="docker exec garage /garage"
+
+echo "⏳ Waiting for Garage to initialize..."
+until $GARAGE_BIN status | grep -q "HEALTHY NODES"; do
+  sleep 2
+done
+
+NODE_ID=$($GARAGE_BIN status | grep -A 2 "HEALTHY NODES" | tail -n 1 | awk '{print $1}')
+
+echo "🔧 Configuring Garage layout for Node ID: $NODE_ID"
+$GARAGE_BIN layout assign -z dc1 -c 10G "$NODE_ID" || true
+CURRENT_VERSION=$($GARAGE_BIN layout show | grep "Version" | awk '{print $2}' || echo "0")
+NEXT_VERSION=$((CURRENT_VERSION + 1))
+$GARAGE_BIN layout apply --version "$NEXT_VERSION" || true
+
+echo "🪣 Creating 'dropimg' S3 bucket..."
+$GARAGE_BIN bucket create dropimg || true
+
+echo "🔑 Generating S3 credentials..."
+KEY_INFO=$($GARAGE_BIN key create dropimg-app)
+S3_ACCESS_KEY_ID=$(echo "$KEY_INFO" | grep "Key ID:" | awk '{print $3}')
+S3_SECRET_ACCESS_KEY=$(echo "$KEY_INFO" | grep "Secret key:" | awk '{print $3}')
+
+$GARAGE_BIN bucket allow --read --write --owner dropimg --key dropimg-app
+
+# Append S3 keys to .env
+cat <<EOF >> .env
+S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
+S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+EOF
+
+echo ""
+echo "🚀 Starting application..."
+if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then
+    echo "   (Including Cloudflare Tunnel)"
+    docker compose --profile tunnel up -d
+else
+    docker compose up -d dropimg
+fi
+
+echo ""
+echo "==============================================="
+echo "✅ $APP_NAME is successfully deployed!"
+echo "==============================================="
+echo "📍 Application URL: $APP_URL"
+echo "🔌 External Port:  $APP_PORT"
+echo "🛡️  Admin Token:   $ADMIN_TOKEN"
+echo ""
+if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then
+    echo "☁️  Cloudflare Tunnel is enabled."
+    echo "   Ensure your credentials.json and cloudflared-config.yaml are correctly set."
+fi
+echo ""
+echo "To view logs: docker compose logs -f dropimg"
+echo "To stop:      docker compose down"
+echo "==============================================="

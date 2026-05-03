@@ -4,13 +4,13 @@ services:
     container_name: dropimg
     restart: unless-stopped
     ports:
-      - "12312:3000"
+      - "${APP_PORT:-12312}:3000"
     environment:
       # General settings
-      APP_NAME: "DropImg"
-      VITE_APP_NAME: "DropImg"
-      APP_URL: "https://img.buildwithmatija.com"
-      PUBLIC_BASE_URL: "https://img.buildwithmatija.com"
+      APP_NAME: "${APP_NAME:-DropImg}"
+      VITE_APP_NAME: "${APP_NAME:-DropImg}"
+      APP_URL: "${APP_URL:-http://localhost:12312}"
+      PUBLIC_BASE_URL: "${APP_URL:-http://localhost:12312}"
       DATABASE_URL: "file:/data/app.sqlite"
       
       # Storage settings (local or s3)
@@ -21,14 +21,14 @@ services:
       MAX_UPLOAD_MB: "20"
       ALLOWED_TYPES: "image/png,image/jpeg,image/webp,image/gif"
       PUBLIC_UPLOADS: "false"
-      ADMIN_TOKEN: "change-me"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-change-me}"
       
       # S3 configuration (Defaulting to internal Garage service)
       S3_ENDPOINT: "http://garage:3900"
       S3_BUCKET: "dropimg"
       S3_REGION: "garage"
-      S3_ACCESS_KEY_ID: "GKb5db65b57d7d0799c680ee25"
-      S3_SECRET_ACCESS_KEY: "f9f9af94d42a9c6ec5c20db92aec602e5ef43b5de9e98a4e22b94a2f41f0c994"
+      S3_ACCESS_KEY_ID: "${S3_ACCESS_KEY_ID:-GKb5db65b57d7d0799c680ee25}"
+      S3_SECRET_ACCESS_KEY: "${S3_SECRET_ACCESS_KEY:-f9f9af94d42a9c6ec5c20db92aec602e5ef43b5de9e98a4e22b94a2f41f0c994}"
       S3_FORCE_PATH_STYLE: "true"
       
     volumes:
@@ -60,6 +60,7 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: dropimg-tunnel
     restart: unless-stopped
+    profiles: ["tunnel"]
     command: tunnel --config /etc/cloudflared/config.yaml run
     depends_on:
       - dropimg
