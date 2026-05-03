@@ -70,6 +70,43 @@ To remove the application and stop all services:
 
 ---
 
+## S3 Ecosystem Integration
+
+DropImg is built from the ground up to be **S3-native**. Because it uses the standard S3 protocol, it can seamlessly integrate into your existing workflow or share storage with other applications:
+
+- **Shared Storage:** You can point DropImg to the same bucket used by other S3-aware systems. For example, it works perfectly alongside **Payload CMS** using the [`@payloadcms/storage-s3`](https://www.npmjs.com/package/@payloadcms/storage-s3) adapter.
+- **Provider Agnostic:** Use any S3-compatible provider including AWS S3, Cloudflare R2, Backblaze B2, Minio, or the built-in Garage S3.
+- **Standard Tooling:** Manage your assets directly using industry-standard tools like `aws-cli`, `rclone`, or Cyberduck.
+
+### **Example: Connecting Payload CMS**
+Because DropImg and Payload use the same S3 environment variables, integration is a breeze:
+
+```typescript
+import { s3Storage } from '@payloadcms/storage-s3'
+
+export default buildConfig({
+  plugins: [
+    s3Storage({
+      collections: {
+        'media': true,
+      },
+      bucket: process.env.S3_BUCKET,
+      config: {
+        endpoint: process.env.S3_ENDPOINT,
+        credentials: {
+          accessKeyId: process.env.S3_ACCESS_KEY_ID,
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+        },
+        region: process.env.S3_REGION,
+        forcePathStyle: true,
+      },
+    }),
+  ],
+})
+```
+
+---
+
 ## Tech Stack
 
 <details>
