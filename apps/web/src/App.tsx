@@ -1,9 +1,16 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { Uploader } from './components/Uploader';
 import { Gallery } from './components/Gallery';
 import { ImagePreview } from './components/ImagePreview';
 
+const APP_NAME = import.meta.env.VITE_APP_NAME || 'DropImg';
+
 function App() {
+  useEffect(() => {
+    document.title = APP_NAME;
+  }, []);
+
   return (
     <BrowserRouter>
       <div className="min-h-screen w-full bg-gray-50 dark:bg-gray-950 flex flex-col items-center py-12 px-4">
@@ -14,7 +21,11 @@ function App() {
           
           <Link to="/" className="inline-block">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2 tracking-tight">
-              Drop<span className="text-blue-600">Img</span>
+              {APP_NAME === 'DropImg' ? (
+                <>Drop<span className="text-blue-600">Img</span></>
+              ) : (
+                APP_NAME
+              )}
             </h1>
           </Link>
           <p className="text-gray-600 dark:text-gray-400 mx-auto max-w-md">
@@ -40,7 +51,7 @@ function App() {
         </main>
 
         <footer className="mt-auto pt-12 text-gray-500 dark:text-gray-400 text-sm text-center">
-          <p className="mb-2">© {new Date().getFullYear()} DropImg • Open Source</p>
+          <p className="mb-2">© {new Date().getFullYear()} {APP_NAME} • Open Source</p>
           <p>
             Build with ❤️ by{' '}
             <a 

@@ -84,6 +84,8 @@ Environment variables can be managed in `docker-compose.yml` or a `.env` file.
 ### General Settings
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `APP_NAME` | Name of the application (API) | `DropImg` |
+| `VITE_APP_NAME` | Name shown in the UI | `DropImg` |
 | `PORT` | Internal API port | `3000` |
 | `APP_URL` | Full URL of the application | `http://localhost:12312` |
 | `STORAGE_DRIVER` | `local` or `s3` | `s3` |

@@ -4,6 +4,7 @@ import { S3StorageDriver } from './storage/s3.js';
 import { StorageDriver } from './storage/types.js';
 
 export const config = {
+  appName: process.env.APP_NAME || 'DropImg',
   port: parseInt(process.env.PORT || '3000', 10),
   appUrl: process.env.APP_URL || 'http://localhost:3000',
   publicBaseUrl: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',

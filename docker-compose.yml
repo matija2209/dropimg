@@ -7,6 +7,8 @@ services:
       - "12312:3000"
     environment:
       # General settings
+      APP_NAME: "DropImg"
+      VITE_APP_NAME: "DropImg"
       APP_URL: "https://img.buildwithmatija.com"
       PUBLIC_BASE_URL: "https://img.buildwithmatija.com"
       DATABASE_URL: "file:/data/app.sqlite"
