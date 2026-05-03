@@ -1,13 +1,26 @@
 # DropImg
 
-![DropImg](https://img.buildwithmatija.com/api/images/l2lqr2ap/file/original)
+<div align="center">
 
+![DropImg Header](https://img.buildwithmatija.com/api/images/l2lqr2ap/file/original)
 
-**DropImg** is a lightweight, clean, and Docker-first self-hosted image hosting application. Built for simplicity and speed, it allows you to drag, drop, or paste images to get instant public URLs for sharing.
+**A lightweight, clean, and Docker-first self-hosted image hosting application.**
 
-It follows a modern "single app" architecture, combining a React frontend with a Hono backend, backed by SQLite for metadata and S3-compatible storage (Garage) for files.
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/matija2209/dropimg.svg)](https://github.com/matija2209/dropimg/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/matija2209/dropimg.svg)](https://github.com/matija2209/dropimg/issues)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2024-brightgreen.svg)](https://nodejs.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com/)
 
-## 🚀 Quick Start
+[Quick Start](#quick-start) • [Features](#features) • [Architecture](#architecture) • [Development](#development) • [Contributing](#contributing)
+
+</div>
+
+---
+
+**DropImg** is built for simplicity and speed. It allows you to drag, drop, or paste images to get instant public URLs for sharing. It follows a modern "single app" architecture, combining a React frontend with a Hono backend, backed by SQLite for metadata and S3-compatible storage (Garage) for files.
+
+## Quick Start
 
 DropImg is designed to be deployed with **zero local dependencies**. You do NOT need Node.js, npm, or a database installed on your VPS. Docker handles everything.
 
@@ -17,24 +30,20 @@ DropImg is designed to be deployed with **zero local dependencies**. You do NOT 
 
 ### One-Click Installation
 ```bash
-git clone https://github.com/yourusername/dropimg.git
+git clone https://github.com/matija2209/dropimg.git
 cd dropimg
 ./install.sh
 ```
 
 ### What the script does:
 1. **Docker Check:** Automatically installs Docker and Docker Compose if they aren't found.
-2. **Interactive Configuration:** Prompts you for:
-   - **App Name:** Custom branding for your instance.
-   - **Port:** Choose which port to expose (default `12312`).
-   - **Public URL:** Automatically detects your VPS Public IP to suggest a default (e.g., `http://1.2.3.4:12312`).
-   - **Admin Token:** Secure token for administrative actions (can be auto-generated).
-   - **Cloudflare Tunnel:** Optional setup for exposing your instance securely via Cloudflare.
+2. **Interactive Configuration:** Prompts you for App Name, Port, Public URL, Admin Token, and optional Cloudflare Tunnel.
 3. **Storage Provisioning:** Initializes **Garage S3**, creates the `dropimg` bucket, and generates access keys.
 4. **Environment Setup:** Creates a `.env` file with all your settings.
 5. **Launch:** Starts all containers in the background.
 
 Once finished, your app will be live at the URL you configured!
+
 ### Uninstallation
 To remove the application and stop all services:
 ```bash
@@ -45,66 +54,69 @@ To remove the application and stop all services:
 - `./uninstall.sh --yes`: Non-interactive, deletes **everything** (containers, data, and config).
 - `./uninstall.sh --keep-data`: Non-interactive, stops services but **preserves** all files.
 
-The script defaults to an interactive mode where it asks for confirmation before deleting data.
-
----
-### Exporting Assets
-To back up all your uploaded images from the internal S3 storage to a local `./export` folder:
-```bash
-./export-assets.sh
-```
-This uses a temporary Docker container to safely sync files without requiring any local S3 tools.
-
 ---
 
-## ✨ Features
+## Features
 
-- **Modern Stack:** Node 24 (LTS), Vite 8, React 19, Hono, and Tailwind CSS 4.
-- **Clean UI:** Full-width responsive layout with Dark Mode support.
 - **Instant Upload:** Support for Drag & Drop and Clipboard Paste.
-- **Built-in Image Tools:** Compress uploaded JPG files or convert PNG to JPG directly from the uploader.
-- **S3-Compatible Storage:** Built-in integration with [Garage](https://garagehq.deuxfleurs.fr/), a lightweight distributed object store.
-- **SQLite + Drizzle:** Zero-config metadata storage with automatic migrations on startup.
-- **Proxied Serving:** Images are served through the API (`/raw/:id`), allowing for private S3 buckets and clean URLs.
-- **Copy-to-Clipboard:** Instant generation of Direct URLs and Markdown snippets.
-- **Delete Links:** Secret tokens generated for every upload to allow user-driven deletion.
+- **Built-in Image Tools:** Compress JPGs or convert PNGs to JPG directly from the uploader.
+- **Modern Stack:** React 19, Vite 8, Hono, and Tailwind CSS 4.
+- **Clean UI:** Full-width responsive layout with Dark Mode support.
+- **S3-Compatible Storage:** Built-in integration with [Garage](https://garagehq.deuxfleurs.fr/).
+- **SQLite + Drizzle:** Zero-config metadata storage with automatic migrations.
+- **Proxied Serving:** Clean URLs (`/raw/:id`) and private S3 bucket support.
+- **Copy-to-Clipboard:** Direct URLs and Markdown snippets generated instantly.
+- **Delete Links:** Secret tokens for user-driven deletion.
 
 ---
 
-## 🖼️ Upload Modes
+## Tech Stack
 
-DropImg supports 3 uploader modes from the main upload screen:
+<details>
+<summary>Click to expand</summary>
 
-- **Upload:** Host the original file as-is. Supports PNG, JPG, WEBP, and GIF.
-- **Compress JPG:** Re-encode uploaded JPG files with `sharp` to reduce file size while keeping JPG output.
-- **PNG to JPG:** Convert uploaded PNG files to JPG with transparency flattened onto a white background.
+| Category | Technology |
+|----------|------------|
+| **Frontend** | ![React](https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white) |
+| **Backend** | ![Hono](https://img.shields.io/badge/Hono-E36002?style=flat-square&logo=hono&logoColor=white) ![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=node.js&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white) |
+| **Database** | ![SQLite](https://img.shields.io/badge/SQLite-07405E?style=flat-square&logo=sqlite&logoColor=white) ![Drizzle](https://img.shields.io/badge/Drizzle_ORM-C5F74F?style=flat-square&logo=drizzle&logoColor=black) |
+| **Storage** | ![Garage](https://img.shields.io/badge/Garage_S3-FF9900?style=flat-square&logo=amazons3&logoColor=white) |
+| **DevOps** | ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white) ![Cloudflare](https://img.shields.io/badge/Cloudflare-F38020?style=flat-square&logo=cloudflare&logoColor=white) |
 
-Notes:
-- The processed output becomes the primary hosted asset.
-- `Compress JPG` accepts `image/jpeg` only.
-- `PNG to JPG` accepts `image/png` only.
-- If JPG recompression would produce a larger file, DropImg keeps the original JPG instead of replacing it.
-- Existing responsive variants are generated from the final hosted asset.
+</details>
 
 ---
 
-## 🏗️ Architecture
+## Architecture
+
+```mermaid
+graph TD
+    User([User]) -->|Browser| Web[React / Vite Frontend]
+    Web -->|API Requests| API[Hono API / Node.js]
+    API -->|Metadata| DB[(SQLite DB)]
+    API -->|Object Storage| S3[(Garage S3 / Local Disk)]
+```
+
+---
+
+## Project Structure
 
 ```text
-Browser -> [ React / Vite Frontend ]
-                |
-                v
-        [ Hono API / Node.js ]
-                |
-        +-------+-------+
-        |               |
-[ SQLite DB ]    [ Garage S3 / Local Disk ]
-(Metadata)       (Object Storage)
+.
+├── apps/
+│   ├── api/          # Hono Backend (TypeScript)
+│   └── web/          # React Frontend (Vite + Tailwind 4)
+├── docker/
+│   └── garage/       # Garage S3 configuration & templates
+├── scripts/          # Helper scripts for installation and config
+├── install.sh        # Main installation script
+├── uninstall.sh      # Uninstallation script
+└── docker-compose.yml # Orchestrates API, Web, and Garage
 ```
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Environment variables can be managed in `docker-compose.yml` or a `.env` file.
 
@@ -119,19 +131,9 @@ Environment variables can be managed in `docker-compose.yml` or a `.env` file.
 | `MAX_UPLOAD_MB` | Max file size in megabytes | `20` |
 | `ADMIN_TOKEN` | Token for administrative tasks | `change-me` |
 
-### S3 / Garage Settings
-| Variable | Description |
-|----------|-------------|
-| `S3_ENDPOINT` | The S3 API endpoint (e.g., `http://garage:3900`) |
-| `S3_BUCKET` | The bucket name (e.g., `dropimg`) |
-| `S3_REGION` | The S3 region (e.g., `garage`) |
-| `S3_ACCESS_KEY_ID` | Your S3 Access Key |
-| `S3_SECRET_ACCESS_KEY` | Your S3 Secret Key |
-| `S3_FORCE_PATH_STYLE` | Set to `true` for Garage/MinIO |
-
 ---
 
-## 🛠️ Development
+## Development
 
 ### Prerequisites
 - Node 24+
@@ -155,97 +157,16 @@ Environment variables can be managed in `docker-compose.yml` or a `.env` file.
    npm run dev
    ```
 
-4. **Database Migrations:**
-   Migrations run automatically on API startup. You can manually push schema changes using:
-   ```bash
-   cd apps/api
-   npm run db:push
-   ```
-
 ---
 
-## ☁️ Cloudflare Tunnel Setup (CLI)
+## Contributing
 
-If you want to expose your local instance to a custom domain using `cloudflared`:
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-1. **Login to Cloudflare:**
-   ```bash
-   cloudflared tunnel login
-   ```
+## Security
 
-2. **Create a new tunnel:**
-   ```bash
-   cloudflared tunnel create dropimg
-   ```
+For security vulnerabilities, please refer to our [Security Policy](SECURITY.md).
 
-3. **Route your domain:**
-   ```bash
-   cloudflared tunnel route dns dropimg your.domain.com
-   ```
+## License
 
-4. **Configure the project:**
-   Update `cloudflared-config.yaml` with your `tunnel` ID and the path to your `credentials-file` (usually in `~/.cloudflared/<ID>.json`).
-
-5. **Start the stack:**
-   The `tunnel` service in `docker-compose.yml` will handle the connection automatically.
-
----
-
-## 📦 Deployment Notes
-
-- **Cloudflare Tunnel:** The project includes a `tunnel` service in `docker-compose.yml`. 
-  - Hostname: `img.buildwithmatija.com`
-  - Target: `http://dropimg:3000`
-  - Config: `cloudflared-config.yaml`
-- **Nginx/Reverse Proxy:** Ensure `client_max_body_size` is set to match your `MAX_UPLOAD_MB`.
-- **Persistence:** All data is stored in the `./data` directory. Back up this directory to preserve your images and database.
-
----
-
-## Troubleshooting Playbook
-
-### Cloudflare `Error 1033`
-
-If the public hostname shows Cloudflare `Error 1033`, Cloudflare cannot currently find a healthy `cloudflared` connector for the tunnel.
-
-For this project, a brief `1033` right after `docker compose up -d` can be normal while `cloudflared` is still registering its edge connections.
-
-Check these items in order:
-
-1. **Confirm the app is up locally**
-   ```bash
-   curl -I http://localhost:12312
-   ```
-
-2. **Check container status**
-   ```bash
-   docker compose ps
-   ```
-
-3. **Check tunnel logs**
-   ```bash
-   docker logs --tail 200 dropimg-tunnel
-   ```
-
-4. **Wait for healthy tunnel registration**
-   You want to see log lines like:
-   - `Registered tunnel connection ... connIndex=0`
-   - `Registered tunnel connection ... connIndex=1`
-   - `Registered tunnel connection ... connIndex=2`
-   - `Registered tunnel connection ... connIndex=3`
-
-5. **Verify the tunnel origin target**
-   In this repo, `cloudflared-config.yaml` should point to:
-   ```yaml
-   ingress:
-     - hostname: img.buildwithmatija.com
-       service: http://dropimg:3000
-   ```
-
-6. **Recreate only the tunnel container if needed**
-   ```bash
-   docker compose up -d tunnel
-   ```
-
-## 📄 License
-MIT
+This project is licensed under the [MIT License](LICENSE).
