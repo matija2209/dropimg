@@ -33,14 +33,8 @@ fi
 echo ""
 echo "⚙️  Basic Configuration Setup"
 
-# Try to get Public IP
-PUBLIC_IP=$(curl -s --max-time 2 https://ifconfig.me || echo "localhost")
-# Wrap IPv6 in brackets if needed
-if [[ "$PUBLIC_IP" =~ : ]]; then
-    IP_URL_BASE="[$PUBLIC_IP]"
-else
-    IP_URL_BASE="$PUBLIC_IP"
-fi
+# Try to get Public IPv4 (preferring IPv4)
+PUBLIC_IP=$(curl -s -4 --max-time 2 https://ifconfig.me || curl -s -4 --max-time 2 https://api.ipify.org || echo "localhost")
 
 read -p "Enter the App Name [DropImg]: " APP_NAME
 APP_NAME=${APP_NAME:-DropImg}
@@ -50,7 +44,7 @@ SUGGESTED_APP_PORT=$(find_available_port 12312)
 read -p "Enter the port to expose the app on [$SUGGESTED_APP_PORT]: " APP_PORT
 APP_PORT=${APP_PORT:-$SUGGESTED_APP_PORT}
 
-DEFAULT_URL="http://$IP_URL_BASE:$APP_PORT"
+DEFAULT_URL="http://$PUBLIC_IP:$APP_PORT"
 read -p "Enter your public domain/URL [$DEFAULT_URL]: " APP_URL
 APP_URL=${APP_URL:-$DEFAULT_URL}
 
@@ -62,14 +56,14 @@ fi
 
 # Storage Port Configuration
 echo ""
-echo "📦 Storage Port Configuration (for internal S3/Garage)"
+echo "📦 Storage Port Configuration (External mappings)"
 SUGGESTED_S3_PORT=$(find_available_port 3900)
-read -p "Garage S3 Port [$SUGGESTED_S3_PORT]: " GARAGE_S3_PORT
+read -p "External S3 Port [$SUGGESTED_S3_PORT]: " GARAGE_S3_PORT
 GARAGE_S3_PORT=${GARAGE_S3_PORT:-$SUGGESTED_S3_PORT}
 
-SUGGESTED_RPC_PORT=$(find_available_port 3903)
-read -p "Garage RPC Port [$SUGGESTED_RPC_PORT]: " GARAGE_RPC_PORT
-GARAGE_RPC_PORT=${GARAGE_RPC_PORT:-$SUGGESTED_RPC_PORT}
+SUGGESTED_ADMIN_PORT=$(find_available_port 3903)
+read -p "External Garage Admin Port [$SUGGESTED_ADMIN_PORT]: " GARAGE_RPC_PORT
+GARAGE_RPC_PORT=${GARAGE_RPC_PORT:-$SUGGESTED_ADMIN_PORT}
 
 # Cloudflare Tunnel Option
 echo ""
@@ -103,7 +97,6 @@ GARAGE_RPC_PORT=$GARAGE_RPC_PORT
 EOF
 
 # Update cloudflared-config.yaml hostname if needed
-# Better domain extraction (handles IPv6 brackets and ports)
 DOMAIN_ONLY=$(echo "$APP_URL" | sed -E 's|^.*://||; s|/.*$||; s|\[?([^]]+)\]?(:.*)?|\1|')
 
 if [ -f cloudflared-config.yaml ]; then
