@@ -138,6 +138,26 @@ export const ImagePreview: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center justify-between">
+                  Smart URL
+                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 uppercase">Auto-Responsive</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={image.autoUrl}
+                    className="flex-1 p-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(image.autoUrl, 'auto')}
+                    className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-sm active:scale-95"
+                  >
+                    {copied === 'auto' ? <Check size={20} /> : <Copy size={20} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Direct URL</label>
                 <div className="flex gap-2">
                   <input
@@ -167,6 +187,27 @@ export const ImagePreview: React.FC = () => {
                     className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-sm active:scale-95"
                   >
                     {copied === 'md' ? <Check size={20} /> : <Copy size={20} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center justify-between">
+                  Responsive HTML
+                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 uppercase">Modern HTML5</span>
+                </label>
+                <div className="flex gap-2">
+                  <textarea
+                    readOnly
+                    rows={3}
+                    value={image.responsiveHtml}
+                    className="flex-1 p-3 text-xs font-mono text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(image.responsiveHtml, 'responsive')}
+                    className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-sm active:scale-95 self-start"
+                  >
+                    {copied === 'responsive' ? <Check size={20} /> : <Copy size={20} />}
                   </button>
                 </div>
               </div>

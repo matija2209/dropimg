@@ -70,6 +70,83 @@ imagesRoute.get('/:id/file/:variant', async (c) => {
   }
 });
 
+// Get responsive HTML snippet
+imagesRoute.get('/:id/responsive', async (c) => {
+  const id = c.req.param('id');
+  const image = await db.query.images.findFirst({
+    where: eq(images.id, id),
+    with: {
+      variants: true,
+    },
+  });
+
+  if (!image) {
+    return c.json({ error: 'Image not found' }, 404);
+  }
+
+  const serialized = serializeImageAsset(image);
+  
+  if (c.req.query('format') === 'json') {
+    return c.json({ html: serialized.responsiveHtml });
+  }
+
+  return c.text(serialized.responsiveHtml);
+});
+
+// Smart responsive auto-serving
+imagesRoute.get('/:id/auto', async (c) => {
+  const image = await db.query.images.findFirst({
+    where: eq(images.id, c.req.param('id')),
+    with: {
+      variants: true,
+    },
+  });
+
+  if (!image) {
+    return c.json({ error: 'Image not found' }, 404);
+  }
+
+  // Content Negotiation / Client Hints
+  const viewportWidth = parseInt(c.req.header('Sec-CH-Viewport-Width') || '0', 10);
+  const dpr = parseFloat(c.req.header('Sec-CH-DPR') || '1');
+  const targetWidth = viewportWidth > 0 ? viewportWidth * dpr : 0;
+
+  let resolved = {
+    variant: 'original' as VariantName,
+    storageKey: image.filename,
+    mimeType: image.mimeType,
+  };
+
+  if (targetWidth > 0 && image.variants.length > 0) {
+    // Find the smallest variant that is >= targetWidth
+    const sortedVariants = [...image.variants]
+      .filter(v => v.width)
+      .sort((a, b) => (a.width || 0) - (b.width || 0));
+    
+    const bestVariant = sortedVariants.find(v => (v.width || 0) >= targetWidth) || sortedVariants[sortedVariants.length - 1];
+    
+    if (bestVariant) {
+      resolved = {
+        variant: bestVariant.variant as VariantName,
+        storageKey: bestVariant.storageKey,
+        mimeType: bestVariant.mimeType,
+      };
+    }
+  }
+
+  try {
+    const { body, mimeType } = await storage.get(resolved.storageKey);
+
+    return c.body(body, 200, {
+      'Content-Type': mimeType || resolved.mimeType || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=3600', // Shorter cache for auto-serving
+      'Vary': 'Sec-CH-Viewport-Width, Sec-CH-DPR',
+    });
+  } catch (error) {
+    return c.notFound();
+  }
+});
+
 // List all images
 imagesRoute.get('/', async (c) => {
   const allImages = await db.query.images.findMany({

@@ -21,6 +21,8 @@ export interface ImageAsset {
   isAnimated: boolean;
   createdAt: string;
   directUrl: string;
+  autoUrl: string;
+  responsiveHtml: string;
   original: ImageRendition;
   variants: Partial<Record<VariantName, ImageRendition>>;
 }

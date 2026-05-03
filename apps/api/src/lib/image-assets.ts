@@ -15,18 +15,18 @@ export function buildBase64Url(imageId: string, variant: VariantName): string {
 }
 
 export function serializeImageAsset(image: ImageWithVariants) {
+  const variantData = (image.variants ?? []).map((variant) => ({
+    name: variant.variant as VariantName,
+    url: buildVariantUrl(image.id, variant.variant as VariantName),
+    base64Url: buildBase64Url(image.id, variant.variant as VariantName),
+    mimeType: variant.mimeType,
+    width: variant.width,
+    height: variant.height,
+    size: variant.size,
+  }));
+
   const variants = Object.fromEntries(
-    (image.variants ?? []).map((variant) => [
-      variant.variant,
-      {
-        url: buildVariantUrl(image.id, variant.variant as VariantName),
-        base64Url: buildBase64Url(image.id, variant.variant as VariantName),
-        mimeType: variant.mimeType,
-        width: variant.width,
-        height: variant.height,
-        size: variant.size,
-      },
-    ])
+    variantData.map((v) => [v.name, v])
   );
 
   const original = {
@@ -38,10 +38,25 @@ export function serializeImageAsset(image: ImageWithVariants) {
     size: image.size,
   };
 
+  // Generate responsive HTML snippet
+  const srcsetEntries = variantData
+    .filter(v => v.width)
+    .sort((a, b) => (a.width || 0) - (b.width || 0))
+    .map(v => `${v.url} ${v.width}w`);
+
+  let responsiveHtml = `<img src="${original.url}" alt="${image.altName || ''}" />`;
+  if (srcsetEntries.length > 0) {
+    const srcset = srcsetEntries.join(', ');
+    const sizes = `(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 1024px`;
+    responsiveHtml = `<img src="${original.url}" srcset="${srcset}" sizes="${sizes}" alt="${image.altName || ''}" loading="lazy" />`;
+  }
+
   return {
     ...image,
     directUrl: original.url,
+    autoUrl: `${config.publicBaseUrl}/api/images/${image.id}/auto`,
     original,
     variants,
+    responsiveHtml,
   };
 }

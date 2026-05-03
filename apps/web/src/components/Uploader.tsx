@@ -197,6 +197,7 @@ export const Uploader: React.FC = () => {
 
   const copyOptions = [
     { id: 'direct', label: 'Direct URL', value: result?.directUrl || '' },
+    { id: 'auto', label: 'Smart URL (Auto-Responsive)', value: result?.autoUrl || '' },
     { id: 'thumbnail', label: 'Thumbnail URL', value: result?.variants.thumbnail?.url || '' },
     { id: 'tablet', label: 'Tablet URL', value: result?.variants.tablet?.url || '' },
     { id: 'social', label: 'Social URL', value: result?.variants.social?.url || '' },
@@ -267,6 +268,27 @@ export const Uploader: React.FC = () => {
                     className="rounded bg-blue-600 p-2 text-white transition hover:bg-blue-700"
                   >
                     {copied === 'md' ? <Check size={18} /> : <Copy size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                  Responsive HTML
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 uppercase">Modern HTML5</span>
+                </label>
+                <div className="flex gap-2">
+                  <textarea
+                    readOnly
+                    rows={3}
+                    value={result.responsiveHtml}
+                    className="flex-1 rounded border border-gray-200 bg-gray-50 p-2 text-xs font-mono text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white resize-none"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(result.responsiveHtml, 'responsive')}
+                    className="rounded bg-blue-600 p-2 text-white transition hover:bg-blue-700 self-start"
+                  >
+                    {copied === 'responsive' ? <Check size={18} /> : <Copy size={18} />}
                   </button>
                 </div>
               </div>
