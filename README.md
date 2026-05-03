@@ -141,16 +141,69 @@ If you want to expose your local instance to a custom domain using `cloudflared`
 5. **Start the stack:**
    The `tunnel` service in `docker-compose.yml` will handle the connection automatically.
 
+   `cloudflared` still needs a short period to register with Cloudflare after the containers start. During that window, the hostname can return Cloudflare `Error 1033` until the tunnel becomes healthy.
+
 ---
 
 ## 📦 Deployment Notes
 
 - **Cloudflare Tunnel:** The project includes a `tunnel` service in `docker-compose.yml`. 
   - Hostname: `img.buildwithmatija.com`
-  - Target: `http://localhost:12312`
+  - Target: `http://dropimg:3000`
   - Config: `cloudflared-config.yaml`
 - **Nginx/Reverse Proxy:** Ensure `client_max_body_size` is set to match your `MAX_UPLOAD_MB`.
 - **Persistence:** All data is stored in the `./data` directory. Back up this directory to preserve your images and database.
+
+---
+
+## Troubleshooting Playbook
+
+### Cloudflare `Error 1033`
+
+If the public hostname shows Cloudflare `Error 1033`, Cloudflare cannot currently find a healthy `cloudflared` connector for the tunnel.
+
+For this project, a brief `1033` right after `docker compose up -d` can be normal while `cloudflared` is still registering its edge connections.
+
+Check these items in order:
+
+1. **Confirm the app is up locally**
+   ```bash
+   curl -I http://localhost:12312
+   ```
+
+2. **Check container status**
+   ```bash
+   docker compose ps
+   ```
+
+3. **Check tunnel logs**
+   ```bash
+   docker logs --tail 200 dropimg-tunnel
+   ```
+
+4. **Wait for healthy tunnel registration**
+   You want to see log lines like:
+   - `Registered tunnel connection ... connIndex=0`
+   - `Registered tunnel connection ... connIndex=1`
+   - `Registered tunnel connection ... connIndex=2`
+   - `Registered tunnel connection ... connIndex=3`
+
+5. **Verify the tunnel origin target**
+   In this repo, [cloudflared-config.yaml](/home/matija/dropimg/cloudflared-config.yaml:1) should point to:
+   ```yaml
+   ingress:
+     - hostname: img.buildwithmatija.com
+       service: http://dropimg:3000
+   ```
+
+6. **Recreate only the tunnel container if needed**
+   ```bash
+   docker compose up -d tunnel
+   ```
+
+Notes:
+- The `ICMP proxy feature is disabled` warning in `cloudflared` logs is not the cause of `1033` in this setup.
+- If the tunnel is healthy but the public hostname still does not load, check Cloudflare-side protections next. A `403` challenge page is a different problem from `1033`.
 
 ## 📄 License
 MIT

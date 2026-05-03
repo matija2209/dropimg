@@ -3,5 +3,5 @@ credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
   - hostname: img.buildwithmatija.com
-    service: http://localhost:12312
+    service: http://dropimg:3000
   - service: http_status:404

@@ -59,7 +59,8 @@ services:
     container_name: dropimg-tunnel
     restart: unless-stopped
     command: tunnel --config /etc/cloudflared/config.yaml run
+    depends_on:
+      - dropimg
     volumes:
       - ./cloudflared-config.yaml:/etc/cloudflared/config.yaml:ro
       - ./9e396975-99a6-4af3-9e4a-e4aff1bb50f8.json:/etc/cloudflared/credentials.json:ro
-    network_mode: "host"
