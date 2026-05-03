@@ -1,5 +1,8 @@
 # DropImg
 
+![DropImg](https://img.buildwithmatija.com/api/images/l2lqr2ap/file/original)
+
+
 **DropImg** is a lightweight, clean, and Docker-first self-hosted image hosting application. Built for simplicity and speed, it allows you to drag, drop, or paste images to get instant public URLs for sharing.
 
 It follows a modern "single app" architecture, combining a React frontend with a Hono backend, backed by SQLite for metadata and S3-compatible storage (Garage) for files.
