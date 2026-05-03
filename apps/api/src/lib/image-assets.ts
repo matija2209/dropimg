@@ -10,12 +10,17 @@ export function buildVariantUrl(imageId: string, variant: VariantName): string {
   return `${config.publicBaseUrl}/api/images/${imageId}/file/${variant}`;
 }
 
+export function buildBase64Url(imageId: string, variant: VariantName): string {
+  return `${config.publicBaseUrl}/api/images/${imageId}/base64/${variant}`;
+}
+
 export function serializeImageAsset(image: ImageWithVariants) {
   const variants = Object.fromEntries(
     (image.variants ?? []).map((variant) => [
       variant.variant,
       {
         url: buildVariantUrl(image.id, variant.variant as VariantName),
+        base64Url: buildBase64Url(image.id, variant.variant as VariantName),
         mimeType: variant.mimeType,
         width: variant.width,
         height: variant.height,
@@ -26,6 +31,7 @@ export function serializeImageAsset(image: ImageWithVariants) {
 
   const original = {
     url: buildVariantUrl(image.id, 'original'),
+    base64Url: buildBase64Url(image.id, 'original'),
     mimeType: image.mimeType,
     width: image.width,
     height: image.height,

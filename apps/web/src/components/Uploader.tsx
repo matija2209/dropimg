@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Upload, Copy, Check, Trash2, Image as ImageIcon, Type } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { formatDimensions, formatSize, getDisplayName, getPreviewUrl } from '../lib/images';
+import { formatDimensions, formatSize, getBase64ApiPath, getDisplayName, getPreviewUrl } from '../lib/images';
 import type { ImageAsset } from '../lib/images';
 
 interface UploadResponse extends ImageAsset {
@@ -14,6 +14,7 @@ export const Uploader: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<UploadResponse | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [copying, setCopying] = useState<string | null>(null);
   const [altName, setAltName] = useState('');
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -83,8 +84,33 @@ export const Uploader: React.FC = () => {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const copyBase64ToClipboard = async (variant: 'original' | 'thumbnail') => {
+    if (!result) {
+      return;
+    }
+
+    const copyId = `base64-${variant}`;
+    setCopying(copyId);
+
+    try {
+      const response = await fetch(getBase64ApiPath(result.id, variant));
+      if (!response.ok) {
+        throw new Error('Failed to fetch base64');
+      }
+
+      const payload = await response.json();
+      copyToClipboard(payload.dataUrl, copyId);
+    } catch (error) {
+      console.error('Error copying base64:', error);
+      alert('Failed to prepare base64. Please try again.');
+    } finally {
+      setCopying(null);
+    }
+  };
+
   const copyOptions = [
     { id: 'direct', label: 'Original URL', value: result?.directUrl || '' },
+    { id: 'thumbnail', label: 'Thumbnail URL', value: result?.variants.thumbnail?.url || '' },
     { id: 'tablet', label: 'Tablet URL', value: result?.variants.tablet?.url || '' },
     { id: 'social', label: 'Social URL', value: result?.variants.social?.url || '' },
   ].filter((option) => option.value);
@@ -113,7 +139,7 @@ export const Uploader: React.FC = () => {
             <div key={option.id}>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{option.label}</label>
               <div className="flex gap-2">
-                <input readOnly value={option.value} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
+                <input readOnly value={option.value} className="flex-1 p-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
                 <button onClick={() => copyToClipboard(option.value, option.id)} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                   {copied === option.id ? <Check size={18} /> : <Copy size={18} />}
                 </button>
@@ -124,9 +150,33 @@ export const Uploader: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Markdown</label>
             <div className="flex gap-2">
-              <input readOnly value={`![${getDisplayName(result)}](${result.directUrl})`} className="flex-1 p-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
+              <input readOnly value={`![${getDisplayName(result)}](${result.directUrl})`} className="flex-1 p-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded" />
               <button onClick={() => copyToClipboard(`![${getDisplayName(result)}](${result.directUrl})`, 'md')} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                 {copied === 'md' ? <Check size={18} /> : <Copy size={18} />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Base64</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => copyBase64ToClipboard(result.variants.thumbnail ? 'thumbnail' : 'original')}
+                className="flex-1 p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-sm text-left hover:border-blue-300 dark:hover:border-blue-700 transition"
+                disabled={copying !== null}
+              >
+                {copying === `base64-${result.variants.thumbnail ? 'thumbnail' : 'original'}`
+                  ? 'Preparing base64 data URL...'
+                  : `Copy ${result.variants.thumbnail ? 'thumbnail' : 'original'} as base64 data URL`}
+              </button>
+              <button
+                onClick={() => copyBase64ToClipboard(result.variants.thumbnail ? 'thumbnail' : 'original')}
+                className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50"
+                disabled={copying !== null}
+              >
+                {copied === `base64-${result.variants.thumbnail ? 'thumbnail' : 'original'}`
+                  ? <Check size={18} />
+                  : <Copy size={18} />}
               </button>
             </div>
           </div>

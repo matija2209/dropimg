@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Copy, Check, ExternalLink, Calendar, HardDrive, ArrowLeft } from 'lucide-react';
-import { formatDimensions, formatSize, getDisplayName, getPrimaryViewUrl, type ImageAsset } from '../lib/images';
+import { formatDimensions, formatSize, getBase64ApiPath, getDisplayName, getPrimaryViewUrl, type ImageAsset } from '../lib/images';
 
 type RenditionEntry = {
   key: string;
@@ -14,6 +14,7 @@ export const ImagePreview: React.FC = () => {
   const [image, setImage] = useState<ImageAsset | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
+  const [copying, setCopying] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchImage = async () => {
@@ -36,6 +37,30 @@ export const ImagePreview: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopied(type);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const copyBase64ToClipboard = async (variant: RenditionEntry['key']) => {
+    if (!image) {
+      return;
+    }
+
+    const copyId = `${variant}-base64`;
+    setCopying(copyId);
+
+    try {
+      const response = await fetch(getBase64ApiPath(image.id, variant as 'original' | 'thumbnail' | 'card' | 'tablet' | 'social'));
+      if (!response.ok) {
+        throw new Error('Failed to fetch base64');
+      }
+
+      const payload = await response.json();
+      copyToClipboard(payload.dataUrl, copyId);
+    } catch (error) {
+      console.error('Error copying base64:', error);
+      alert('Failed to prepare base64. Please try again.');
+    } finally {
+      setCopying(null);
+    }
   };
 
   const renditionEntries: RenditionEntry[] = image
@@ -125,7 +150,7 @@ export const ImagePreview: React.FC = () => {
                 <input 
                   readOnly 
                   value={image.directUrl} 
-                  className="flex-1 p-3 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  className="flex-1 p-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                 />
                 <button 
                   onClick={() => copyToClipboard(image.directUrl, 'direct')} 
@@ -142,7 +167,7 @@ export const ImagePreview: React.FC = () => {
                 <input 
                   readOnly 
                   value={`![${getDisplayName(image)}](${image.directUrl})`} 
-                  className="flex-1 p-3 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  className="flex-1 p-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                 />
                 <button 
                   onClick={() => copyToClipboard(`![${getDisplayName(image)}](${image.directUrl})`, 'md')} 
@@ -172,15 +197,25 @@ export const ImagePreview: React.FC = () => {
                         {copied === entry.key ? <Check size={18} /> : <Copy size={18} />}
                       </button>
                     </div>
-                    <a
-                      href={entry.rendition.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      <ExternalLink size={16} />
-                      Open rendition
-                    </a>
+                    <div className="mt-3 flex items-center gap-3">
+                      <a
+                        href={entry.rendition.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        <ExternalLink size={16} />
+                        Open rendition
+                      </a>
+                      <button
+                        onClick={() => copyBase64ToClipboard(entry.key)}
+                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                        disabled={copying !== null}
+                      >
+                        {copied === `${entry.key}-base64` ? <Check size={16} /> : <Copy size={16} />}
+                        {copying === `${entry.key}-base64` ? 'Preparing base64...' : 'Copy base64'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

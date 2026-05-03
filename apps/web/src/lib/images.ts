@@ -2,6 +2,7 @@ export type VariantName = 'thumbnail' | 'card' | 'tablet' | 'social';
 
 export interface ImageRendition {
   url: string;
+  base64Url: string;
   mimeType: string;
   width: number | null;
   height: number | null;
@@ -33,6 +34,10 @@ export function getPreviewUrl(image: Pick<ImageAsset, 'directUrl' | 'variants'>)
 
 export function getPrimaryViewUrl(image: Pick<ImageAsset, 'directUrl' | 'variants'>): string {
   return image.variants.tablet?.url || getPreviewUrl(image);
+}
+
+export function getBase64ApiPath(imageId: string, variant: VariantName | 'original'): string {
+  return `/api/images/${imageId}/base64/${variant}`;
 }
 
 export function formatSize(bytes: number): string {
