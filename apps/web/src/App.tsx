@@ -7,7 +7,7 @@ function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen w-full bg-gray-50 dark:bg-gray-950 flex flex-col items-center py-12 px-4">
-        <header className="mb-12 text-center w-full max-w-2xl relative">
+        <header className="mb-12 text-center w-full max-w-6xl relative">
           <div className="absolute left-0 top-1/2 -translate-y-1/2 flex gap-4">
              {/* Potential Nav if needed */}
           </div>
@@ -39,8 +39,19 @@ function App() {
           </Routes>
         </main>
 
-        <footer className="mt-auto pt-12 text-gray-400 text-sm">
-          <p>© {new Date().getFullYear()} DropImg • Open Source</p>
+        <footer className="mt-auto pt-12 text-gray-500 dark:text-gray-400 text-sm text-center">
+          <p className="mb-2">© {new Date().getFullYear()} DropImg • Open Source</p>
+          <p>
+            Build with ❤️ by{' '}
+            <a 
+              href="https://buildwithmatija.com/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="font-medium hover:text-blue-600 dark:hover:text-blue-400 transition"
+            >
+              buildwithmatija.com
+            </a>
+          </p>
         </footer>
       </div>
     </BrowserRouter>

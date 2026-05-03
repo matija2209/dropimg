@@ -15,7 +15,7 @@ The fastest way to get started is using Docker Compose. Follow these **3 steps**
    ```
 
 2. **Start the Stack:**
-   Builds the Node 24 image and starts the services.
+   Builds the Node image and starts the services.
    ```bash
    docker compose up -d
    ```
@@ -32,7 +32,8 @@ Access the UI at: **`http://localhost:12312`**
 
 ## ✨ Features
 
-- **Modern Stack:** Node 24 (LTS), Vite 8, React, Hono, and Tailwind CSS.
+- **Modern Stack:** Node 24 (LTS), Vite 8, React 19, Hono, and Tailwind CSS 4.
+- **Clean UI:** Full-width responsive layout with Dark Mode support.
 - **Instant Upload:** Support for Drag & Drop and Clipboard Paste.
 - **Built-in Image Tools:** Compress uploaded JPG files or convert PNG to JPG directly from the uploader.
 - **S3-Compatible Storage:** Built-in integration with [Garage](https://garagehq.deuxfleurs.fr/), a lightweight distributed object store.
@@ -45,14 +46,14 @@ Access the UI at: **`http://localhost:12312`**
 
 ## 🖼️ Upload Modes
 
-DropImg now supports 3 uploader modes from the main upload screen:
+DropImg supports 3 uploader modes from the main upload screen:
 
-- **Upload:** Host the original file as-is.
+- **Upload:** Host the original file as-is. Supports PNG, JPG, WEBP, and GIF.
 - **Compress JPG:** Re-encode uploaded JPG files with `sharp` to reduce file size while keeping JPG output.
 - **PNG to JPG:** Convert uploaded PNG files to JPG with transparency flattened onto a white background.
 
 Notes:
-- The processed output becomes the primary hosted asset, so copied links, previews, and gallery entries point to the compressed or converted file.
+- The processed output becomes the primary hosted asset.
 - `Compress JPG` accepts `image/jpeg` only.
 - `PNG to JPG` accepts `image/png` only.
 - If JPG recompression would produce a larger file, DropImg keeps the original JPG instead of replacing it.
@@ -159,8 +160,6 @@ If you want to expose your local instance to a custom domain using `cloudflared`
 5. **Start the stack:**
    The `tunnel` service in `docker-compose.yml` will handle the connection automatically.
 
-   `cloudflared` still needs a short period to register with Cloudflare after the containers start. During that window, the hostname can return Cloudflare `Error 1033` until the tunnel becomes healthy.
-
 ---
 
 ## 📦 Deployment Notes
@@ -207,7 +206,7 @@ Check these items in order:
    - `Registered tunnel connection ... connIndex=3`
 
 5. **Verify the tunnel origin target**
-   In this repo, [cloudflared-config.yaml](/home/matija/dropimg/cloudflared-config.yaml:1) should point to:
+   In this repo, `cloudflared-config.yaml` should point to:
    ```yaml
    ingress:
      - hostname: img.buildwithmatija.com
@@ -218,10 +217,6 @@ Check these items in order:
    ```bash
    docker compose up -d tunnel
    ```
-
-Notes:
-- The `ICMP proxy feature is disabled` warning in `cloudflared` logs is not the cause of `1033` in this setup.
-- If the tunnel is healthy but the public hostname still does not load, check Cloudflare-side protections next. A `403` challenge page is a different problem from `1033`.
 
 ## 📄 License
 MIT

@@ -206,123 +206,129 @@ export const Uploader: React.FC = () => {
     const base64Variant = result.variants.thumbnail ? 'thumbnail' : 'original';
 
     return (
-      <div className="w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
-        <div className="mb-6 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-          <img
-            src={getPreviewUrl(result)}
-            alt={getDisplayName(result)}
-            className="w-full h-auto max-h-96 object-contain bg-gray-50 dark:bg-gray-900"
-          />
-        </div>
+      <div className="w-full max-w-6xl rounded-2xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+        <div className="grid gap-0 lg:grid-cols-12">
+          <div className="border-b border-gray-200 p-6 dark:border-gray-700 lg:col-span-5 lg:border-b-0 lg:border-r">
+            <div className="space-y-4">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-100">
+                <div className="font-medium">{getProcessingHeadline(result.processing)}</div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-800 dark:text-blue-200">
+                  <span>
+                    Source: {formatMimeLabel(result.processing.sourceMimeType)} {formatSize(result.processing.sourceSize)}
+                  </span>
+                  <span>
+                    Hosted: {formatMimeLabel(result.processing.outputMimeType)} {formatSize(result.processing.outputSize)}
+                  </span>
+                  {getProcessingNote(result.processing) && <span>{getProcessingNote(result.processing)}</span>}
+                </div>
+              </div>
 
-        <div className="space-y-4">
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-100">
-            <div className="font-medium">{getProcessingHeadline(result.processing)}</div>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-800 dark:text-blue-200">
-              <span>
-                Source: {formatMimeLabel(result.processing.sourceMimeType)} {formatSize(result.processing.sourceSize)}
-              </span>
-              <span>
-                Hosted: {formatMimeLabel(result.processing.outputMimeType)} {formatSize(result.processing.outputSize)}
-              </span>
-              {getProcessingNote(result.processing) && <span>{getProcessingNote(result.processing)}</span>}
-            </div>
-          </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                <div className="font-medium text-gray-900 dark:text-gray-100">{getDisplayName(result)}</div>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                  <span>{formatSize(result.original.size)}</span>
+                  <span>{formatMimeLabel(result.original.mimeType)}</span>
+                  {formatDimensions(result.original.width, result.original.height) && (
+                    <span>{formatDimensions(result.original.width, result.original.height)}</span>
+                  )}
+                  {result.isAnimated && <span>Animated</span>}
+                </div>
+              </div>
 
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-4 text-sm text-gray-600 dark:text-gray-300">
-            <div className="font-medium text-gray-900 dark:text-gray-100">{getDisplayName(result)}</div>
-            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-              <span>{formatSize(result.original.size)}</span>
-              <span>{formatMimeLabel(result.original.mimeType)}</span>
-              {formatDimensions(result.original.width, result.original.height) && (
-                <span>{formatDimensions(result.original.width, result.original.height)}</span>
-              )}
-              {result.isAnimated && <span>Animated</span>}
-            </div>
-          </div>
+              {copyOptions.map((option) => (
+                <div key={option.id}>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{option.label}</label>
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={option.value}
+                      className="flex-1 rounded border border-gray-200 bg-gray-50 p-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(option.value, option.id)}
+                      className="rounded bg-blue-600 p-2 text-white transition hover:bg-blue-700"
+                    >
+                      {copied === option.id ? <Check size={18} /> : <Copy size={18} />}
+                    </button>
+                  </div>
+                </div>
+              ))}
 
-          {copyOptions.map((option) => (
-            <div key={option.id}>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{option.label}</label>
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={option.value}
-                  className="flex-1 p-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded"
-                />
-                <button
-                  onClick={() => copyToClipboard(option.value, option.id)}
-                  className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Markdown</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={`![${getDisplayName(result)}](${result.directUrl})`}
+                    className="flex-1 rounded border border-gray-200 bg-gray-50 p-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(`![${getDisplayName(result)}](${result.directUrl})`, 'md')}
+                    className="rounded bg-blue-600 p-2 text-white transition hover:bg-blue-700"
+                  >
+                    {copied === 'md' ? <Check size={18} /> : <Copy size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Base64</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => copyBase64ToClipboard(base64Variant)}
+                    className="flex-1 rounded border border-gray-200 bg-gray-50 p-2 text-left text-sm transition hover:border-blue-300 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700"
+                    disabled={copying !== null}
+                  >
+                    {copying === `base64-${base64Variant}`
+                      ? 'Preparing base64 data URL...'
+                      : `Copy ${base64Variant} as base64 data URL`}
+                  </button>
+                  <button
+                    onClick={() => copyBase64ToClipboard(base64Variant)}
+                    className="rounded bg-blue-600 p-2 text-white transition hover:bg-blue-700 disabled:opacity-50"
+                    disabled={copying !== null}
+                  >
+                    {copied === `base64-${base64Variant}` ? <Check size={18} /> : <Copy size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-4 items-center">
+                  <button
+                    onClick={() => {
+                      setResult(null);
+                      setAltName('');
+                      setError(null);
+                    }}
+                    className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  >
+                    Upload another
+                  </button>
+                  <Link to="/assets" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                    View all assets
+                  </Link>
+                </div>
+                <a
+                  href={result.deleteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
                 >
-                  {copied === option.id ? <Check size={18} /> : <Copy size={18} />}
-                </button>
+                  <Trash2 size={16} /> Delete asset
+                </a>
               </div>
             </div>
-          ))}
+          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Markdown</label>
-            <div className="flex gap-2">
-              <input
-                readOnly
-                value={`![${getDisplayName(result)}](${result.directUrl})`}
-                className="flex-1 p-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded"
+          <div className="flex items-center justify-center bg-gray-50 p-6 dark:bg-gray-900/50 lg:col-span-7 lg:min-h-[42rem]">
+            <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-950/80">
+              <img
+                src={getPreviewUrl(result)}
+                alt={getDisplayName(result)}
+                className="max-h-[70vh] w-full object-contain"
               />
-              <button
-                onClick={() => copyToClipboard(`![${getDisplayName(result)}](${result.directUrl})`, 'md')}
-                className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-              >
-                {copied === 'md' ? <Check size={18} /> : <Copy size={18} />}
-              </button>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Base64</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => copyBase64ToClipboard(base64Variant)}
-                className="flex-1 p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-sm text-left hover:border-blue-300 dark:hover:border-blue-700 transition"
-                disabled={copying !== null}
-              >
-                {copying === `base64-${base64Variant}`
-                  ? 'Preparing base64 data URL...'
-                  : `Copy ${base64Variant} as base64 data URL`}
-              </button>
-              <button
-                onClick={() => copyBase64ToClipboard(base64Variant)}
-                className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50"
-                disabled={copying !== null}
-              >
-                {copied === `base64-${base64Variant}` ? <Check size={18} /> : <Copy size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-            <div className="flex gap-4 items-center">
-              <button
-                onClick={() => {
-                  setResult(null);
-                  setAltName('');
-                  setError(null);
-                }}
-                className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-              >
-                Upload another
-              </button>
-              <Link to="/assets" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                View all assets
-              </Link>
-            </div>
-            <a
-              href={result.deleteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
-            >
-              <Trash2 size={16} /> Delete asset
-            </a>
           </div>
         </div>
       </div>
@@ -330,7 +336,7 @@ export const Uploader: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-2xl flex flex-col gap-4">
+    <div className="w-full max-w-6xl flex flex-col gap-4">
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="flex flex-wrap gap-2">
           {(Object.keys(MODE_CONFIG) as UploadMode[]).map((entryMode) => (

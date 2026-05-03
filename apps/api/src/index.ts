@@ -6,19 +6,18 @@ import { config, storage } from './config.js';
 import upload from './routes/upload.js';
 import imagesRoute from './routes/images.js';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { readFile } from 'node:fs/promises';
 
 const app = new Hono();
 
 app.use('*', logger());
 app.use('*', cors());
 
-// Serve static files from web/dist in production
-app.use('/*', serveStatic({ root: './public' }));
-
+// API routes first
 app.route('/api/upload', upload);
 app.route('/api/images', imagesRoute);
 
-// Serve raw storage objects for backward compatibility.
+// Serve raw storage objects
 app.get('/raw/*', async (c) => {
   const filename = decodeURIComponent(c.req.path.replace(/^\/raw\//, ''));
 
@@ -34,8 +33,20 @@ app.get('/raw/*', async (c) => {
   }
 });
 
-app.get('/', (c) => {
-  return c.text('DropImg API is running');
+// Static files
+app.use('/*', serveStatic({ root: './public' }));
+
+// SPA Fallback: Serve index.html for any non-API GET requests that reach this point
+app.notFound(async (c) => {
+  if (c.req.method === 'GET' && !c.req.path.startsWith('/api/') && !c.req.path.startsWith('/raw/')) {
+    try {
+      const html = await readFile('./public/index.html', 'utf-8');
+      return c.html(html);
+    } catch (err) {
+      // If index.html is missing, fall through to default 404
+    }
+  }
+  return c.text('404 Not Found', 404);
 });
 
 console.log(`Server is running on port ${config.port}`);
