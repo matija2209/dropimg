@@ -29,6 +29,8 @@ PUBLIC_IP=$(curl -s --max-time 2 https://ifconfig.me || echo "localhost")
 
 read -p "Enter the App Name [DropImg]: " APP_NAME
 APP_NAME=${APP_NAME:-DropImg}
+# Slugify APP_NAME for project name
+APP_SLUG=$(echo "$APP_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g')
 
 read -p "Enter the port to expose the app on [12312]: " APP_PORT
 APP_PORT=${APP_PORT:-12312}
@@ -42,6 +44,14 @@ if [ -z "$ADMIN_TOKEN" ]; then
     ADMIN_TOKEN=$(openssl rand -hex 16)
     echo "   Generated Admin Token: $ADMIN_TOKEN"
 fi
+
+# Storage Port Configuration
+echo ""
+echo "📦 Storage Port Configuration (for internal S3/Garage)"
+read -p "Garage S3 Port [3900]: " GARAGE_S3_PORT
+GARAGE_S3_PORT=${GARAGE_S3_PORT:-3900}
+read -p "Garage RPC Port [3903]: " GARAGE_RPC_PORT
+GARAGE_RPC_PORT=${GARAGE_RPC_PORT:-3903}
 
 # Cloudflare Tunnel Option
 echo ""
@@ -65,18 +75,28 @@ sed "s/\${GARAGE_RPC_SECRET}/$GARAGE_RPC_SECRET/g; s/\${GARAGE_ADMIN_TOKEN}/$GAR
 echo ""
 echo "📝 Writing environment variables to .env..."
 cat <<EOF > .env
+COMPOSE_PROJECT_NAME=$APP_SLUG
 APP_NAME=$APP_NAME
 APP_PORT=$APP_PORT
 APP_URL=$APP_URL
 ADMIN_TOKEN=$ADMIN_TOKEN
+GARAGE_S3_PORT=$GARAGE_S3_PORT
+GARAGE_RPC_PORT=$GARAGE_RPC_PORT
 EOF
+
+# Update cloudflared-config.yaml hostname if needed
+DOMAIN_ONLY=$(echo "$APP_URL" | sed -e 's|^[^/]*//||' -e 's|/.*$||' -e 's|:.*$||')
+if [ -f cloudflared-config.yaml ]; then
+    echo "☁️  Syncing Cloudflare Tunnel hostname to: $DOMAIN_ONLY"
+    sed -i "s/hostname: .*/hostname: $DOMAIN_ONLY/" cloudflared-config.yaml
+fi
 
 # 5. Start Services (Garage needs to be running to create bucket/keys)
 echo ""
 echo "🚀 Starting Garage storage engine..."
 docker compose up -d garage
 
-GARAGE_BIN="docker exec garage /garage"
+GARAGE_BIN="docker compose exec garage /garage"
 
 echo "⏳ Waiting for Garage to initialize..."
 until $GARAGE_BIN status | grep -q "HEALTHY NODES"; do
@@ -122,6 +142,7 @@ echo "✅ $APP_NAME is successfully deployed!"
 echo "==============================================="
 echo "📍 Application URL: $APP_URL"
 echo "🔌 External Port:  $APP_PORT"
+echo "📦 Garage S3 Port: $GARAGE_S3_PORT"
 echo "🛡️  Admin Token:   $ADMIN_TOKEN"
 echo ""
 if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then
