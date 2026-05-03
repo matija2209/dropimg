@@ -34,6 +34,8 @@ export const variantPresets = [
 
 export type StaticVariantName = (typeof variantPresets)[number]['name'];
 export type VariantName = StaticVariantName | 'original';
+export const uploadModes = ['upload', 'compress-jpg', 'png-to-jpg'] as const;
+export type UploadMode = (typeof uploadModes)[number];
 
 type VariantOutput = {
   variant: StaticVariantName;
@@ -42,6 +44,16 @@ type VariantOutput = {
   size: number;
   width: number;
   height: number;
+};
+
+export type ProcessingSummary = {
+  mode: UploadMode;
+  sourceMimeType: string;
+  sourceSize: number;
+  outputMimeType: string;
+  outputSize: number;
+  savedBytes: number;
+  savedPercent: number;
 };
 
 export type ProcessedImage = {
@@ -54,6 +66,7 @@ export type ProcessedImage = {
   };
   isAnimated: boolean;
   variants: VariantOutput[];
+  processing: ProcessingSummary;
 };
 
 type GeneratedFile = {
@@ -68,6 +81,20 @@ type GeneratedVariantFile = GeneratedFile & {
   height: number;
 };
 
+type QualityRange = {
+  min: number;
+  max: number;
+  default: number;
+};
+
+type TransformResult = {
+  buffer: Buffer;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  isAnimated: boolean;
+};
+
 const OUTPUT_MIME_TYPES = {
   jpeg: 'image/jpeg',
   webp: 'image/webp',
@@ -80,28 +107,57 @@ const ORIGINAL_EXTENSION_BY_MIME: Record<string, string> = {
   'image/webp': '.webp',
 };
 
+const QUALITY_BY_MODE: Record<Exclude<UploadMode, 'upload'>, QualityRange> = {
+  'compress-jpg': {
+    min: 60,
+    max: 92,
+    default: 82,
+  },
+  'png-to-jpg': {
+    min: 70,
+    max: 95,
+    default: 90,
+  },
+};
+
+export class ImageProcessingError extends Error {
+  statusCode: 400;
+
+  constructor(message: string, statusCode: 400 = 400) {
+    super(message);
+    this.name = 'ImageProcessingError';
+    this.statusCode = statusCode;
+  }
+}
+
 export async function processAndStoreImage(input: {
   id: string;
   fileName: string;
   mimeType: string;
   buffer: Buffer;
+  mode: UploadMode;
+  quality?: number;
   storage: StorageDriver;
 }): Promise<ProcessedImage> {
-  const metadata = await sharp(input.buffer, { animated: true }).metadata();
-  const width = metadata.width ?? null;
-  const height = metadata.height ?? null;
-  const isAnimated = (metadata.pages ?? 1) > 1;
+  const sourceMetadata = await sharp(input.buffer, { animated: true }).metadata();
+  const transformed = await transformCanonicalImage({
+    buffer: input.buffer,
+    mimeType: input.mimeType,
+    mode: input.mode,
+    quality: input.quality,
+    metadata: sourceMetadata,
+  });
   const generatedVariants: GeneratedVariantFile[] =
-    !isAnimated && width && height
+    !transformed.isAnimated && transformed.width && transformed.height
       ? await Promise.all(
-          variantPresets.map((preset) => generateStaticVariant(input.id, input.buffer, preset))
+          variantPresets.map((preset) => generateStaticVariant(input.id, transformed.buffer, preset))
         )
       : [];
   const generatedFiles: GeneratedFile[] = [
     {
-      key: `${input.id}/original${getOriginalExtension(input.mimeType, input.fileName)}`,
-      mimeType: input.mimeType,
-      body: input.buffer,
+      key: `${input.id}/original${getOriginalExtension(transformed.mimeType, input.fileName)}`,
+      mimeType: transformed.mimeType,
+      body: transformed.buffer,
     },
     ...generatedVariants.map(({ key, mimeType, body }) => ({ key, mimeType, body })),
   ];
@@ -122,7 +178,7 @@ export async function processAndStoreImage(input: {
     throw error;
   }
 
-  const variants = !isAnimated && width && height
+  const variants = !transformed.isAnimated && transformed.width && transformed.height
     ? generatedVariants.map((variant) => ({
         variant: variant.variant,
         storageKey: variant.key,
@@ -136,13 +192,99 @@ export async function processAndStoreImage(input: {
   return {
     original: {
       storageKey: generatedFiles[0].key,
+      mimeType: transformed.mimeType,
+      size: transformed.buffer.length,
+      width: transformed.width,
+      height: transformed.height,
+    },
+    isAnimated: transformed.isAnimated,
+    variants,
+    processing: buildProcessingSummary({
+      mode: input.mode,
+      sourceMimeType: input.mimeType,
+      sourceSize: input.buffer.length,
+      outputMimeType: transformed.mimeType,
+      outputSize: transformed.buffer.length,
+    }),
+  };
+}
+
+async function transformCanonicalImage(input: {
+  buffer: Buffer;
+  mimeType: string;
+  mode: UploadMode;
+  quality?: number;
+  metadata: sharp.Metadata;
+}): Promise<TransformResult> {
+  const width = input.metadata.width ?? null;
+  const height = input.metadata.height ?? null;
+  const isAnimated = (input.metadata.pages ?? 1) > 1;
+
+  if (input.mode === 'upload') {
+    return {
+      buffer: input.buffer,
       mimeType: input.mimeType,
-      size: input.buffer.length,
       width,
       height,
-    },
-    isAnimated,
-    variants,
+      isAnimated,
+    };
+  }
+
+  if (input.mode === 'compress-jpg') {
+    if (input.mimeType !== 'image/jpeg') {
+      throw new ImageProcessingError('Compress JPG mode only accepts JPG uploads.');
+    }
+
+    if (isAnimated) {
+      throw new ImageProcessingError('Animated JPG uploads cannot be compressed in this mode.');
+    }
+
+    const quality = resolveQuality(input.mode, input.quality);
+    const { data, info } = await sharp(input.buffer)
+      .rotate()
+      .jpeg({ quality, mozjpeg: true })
+      .toBuffer({ resolveWithObject: true });
+
+    if (data.length >= input.buffer.length) {
+      return {
+        buffer: input.buffer,
+        mimeType: input.mimeType,
+        width,
+        height,
+        isAnimated: false,
+      };
+    }
+
+    return {
+      buffer: data,
+      mimeType: OUTPUT_MIME_TYPES.jpeg,
+      width: info.width,
+      height: info.height,
+      isAnimated: false,
+    };
+  }
+
+  if (input.mimeType !== 'image/png') {
+    throw new ImageProcessingError('PNG to JPG mode only accepts PNG uploads.');
+  }
+
+  if (isAnimated) {
+    throw new ImageProcessingError('Animated PNG uploads are not supported for PNG to JPG conversion.');
+  }
+
+  const quality = resolveQuality('png-to-jpg', input.quality);
+  const { data, info } = await sharp(input.buffer)
+    .rotate()
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality, mozjpeg: true })
+    .toBuffer({ resolveWithObject: true });
+
+  return {
+    buffer: data,
+    mimeType: OUTPUT_MIME_TYPES.jpeg,
+    width: info.width,
+    height: info.height,
+    isAnimated: false,
   };
 }
 
@@ -257,4 +399,46 @@ function getOriginalExtension(mimeType: string, fileName: string): string {
 
   const fileExtension = extname(fileName).toLowerCase();
   return fileExtension || '.bin';
+}
+
+function resolveQuality(mode: Exclude<UploadMode, 'upload'>, quality?: number): number {
+  const config = QUALITY_BY_MODE[mode];
+
+  if (quality === undefined || Number.isNaN(quality)) {
+    return config.default;
+  }
+
+  if (!Number.isInteger(quality) || quality < config.min || quality > config.max) {
+    throw new ImageProcessingError(
+      `${describeMode(mode)} quality must be an integer between ${config.min} and ${config.max}.`
+    );
+  }
+
+  return quality;
+}
+
+function buildProcessingSummary(input: {
+  mode: UploadMode;
+  sourceMimeType: string;
+  sourceSize: number;
+  outputMimeType: string;
+  outputSize: number;
+}): ProcessingSummary {
+  const savedBytes = Math.max(0, input.sourceSize - input.outputSize);
+  const savedPercent =
+    input.sourceSize > 0 ? Math.round((savedBytes / input.sourceSize) * 1000) / 10 : 0;
+
+  return {
+    mode: input.mode,
+    sourceMimeType: input.sourceMimeType,
+    sourceSize: input.sourceSize,
+    outputMimeType: input.outputMimeType,
+    outputSize: input.outputSize,
+    savedBytes,
+    savedPercent,
+  };
+}
+
+function describeMode(mode: Exclude<UploadMode, 'upload'>): string {
+  return mode === 'compress-jpg' ? 'Compress JPG' : 'PNG to JPG';
 }

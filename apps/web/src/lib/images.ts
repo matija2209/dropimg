@@ -1,4 +1,5 @@
 export type VariantName = 'thumbnail' | 'card' | 'tablet' | 'social';
+export type UploadMode = 'upload' | 'compress-jpg' | 'png-to-jpg';
 
 export interface ImageRendition {
   url: string;
@@ -22,6 +23,16 @@ export interface ImageAsset {
   directUrl: string;
   original: ImageRendition;
   variants: Partial<Record<VariantName, ImageRendition>>;
+}
+
+export interface ProcessingSummary {
+  mode: UploadMode;
+  sourceMimeType: string;
+  sourceSize: number;
+  outputMimeType: string;
+  outputSize: number;
+  savedBytes: number;
+  savedPercent: number;
 }
 
 export function getDisplayName(image: Pick<ImageAsset, 'altName' | 'id'>): string {
@@ -54,4 +65,8 @@ export function formatDimensions(width: number | null, height: number | null): s
   }
 
   return `${width} x ${height}`;
+}
+
+export function formatMimeLabel(mimeType: string): string {
+  return mimeType.split('/')[1]?.toUpperCase() || mimeType.toUpperCase();
 }

@@ -8,21 +8,30 @@ export const Gallery: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const fetchImages = async () => {
-    try {
-      const response = await fetch('/api/images');
-      if (!response.ok) throw new Error('Failed to fetch images');
-      const data = await response.json();
-      setImages(data);
-    } catch (error) {
-      console.error('Error fetching images:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchImages();
+    let isCancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/images');
+        if (!response.ok) throw new Error('Failed to fetch images');
+        const data = await response.json();
+
+        if (!isCancelled) {
+          setImages(data);
+        }
+      } catch (error) {
+        console.error('Error fetching images:', error);
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const copyToClipboard = (text: string, id: string) => {

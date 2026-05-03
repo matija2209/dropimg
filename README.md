@@ -34,11 +34,29 @@ Access the UI at: **`http://localhost:12312`**
 
 - **Modern Stack:** Node 24 (LTS), Vite 8, React, Hono, and Tailwind CSS.
 - **Instant Upload:** Support for Drag & Drop and Clipboard Paste.
+- **Built-in Image Tools:** Compress uploaded JPG files or convert PNG to JPG directly from the uploader.
 - **S3-Compatible Storage:** Built-in integration with [Garage](https://garagehq.deuxfleurs.fr/), a lightweight distributed object store.
 - **SQLite + Drizzle:** Zero-config metadata storage with automatic migrations on startup.
 - **Proxied Serving:** Images are served through the API (`/raw/:id`), allowing for private S3 buckets and clean URLs.
 - **Copy-to-Clipboard:** Instant generation of Direct URLs and Markdown snippets.
 - **Delete Links:** Secret tokens generated for every upload to allow user-driven deletion.
+
+---
+
+## 🖼️ Upload Modes
+
+DropImg now supports 3 uploader modes from the main upload screen:
+
+- **Upload:** Host the original file as-is.
+- **Compress JPG:** Re-encode uploaded JPG files with `sharp` to reduce file size while keeping JPG output.
+- **PNG to JPG:** Convert uploaded PNG files to JPG with transparency flattened onto a white background.
+
+Notes:
+- The processed output becomes the primary hosted asset, so copied links, previews, and gallery entries point to the compressed or converted file.
+- `Compress JPG` accepts `image/jpeg` only.
+- `PNG to JPG` accepts `image/png` only.
+- If JPG recompression would produce a larger file, DropImg keeps the original JPG instead of replacing it.
+- Existing responsive variants are generated from the final hosted asset.
 
 ---
 
