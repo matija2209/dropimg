@@ -136,6 +136,8 @@ $GARAGE_BIN bucket allow --read --write --owner dropimg --key dropimg-app
 
 # Append S3 keys to .env
 cat <<EOF >> .env
+S3_BUCKET=dropimg
+S3_ENDPOINT=http://garage:3900
 S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
 S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
 EOF

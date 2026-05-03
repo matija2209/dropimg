@@ -35,13 +35,25 @@ cd dropimg
 5. **Launch:** Starts all containers in the background.
 
 Once finished, your app will be live at the URL you configured!
-
 ### Uninstallation
 To remove the application and stop all services:
 ```bash
 ./uninstall.sh
 ```
-The script will ask if you want to preserve or delete your uploaded images and configuration.
+
+**CLI Options:**
+- `./uninstall.sh --yes`: Non-interactive, deletes **everything** (containers, data, and config).
+- `./uninstall.sh --keep-data`: Non-interactive, stops services but **preserves** all files.
+
+The script defaults to an interactive mode where it asks for confirmation before deleting data.
+
+---
+### Exporting Assets
+To back up all your uploaded images from the internal S3 storage to a local `./export` folder:
+```bash
+./export-assets.sh
+```
+This uses a temporary Docker container to safely sync files without requiring any local S3 tools.
 
 ---
 
