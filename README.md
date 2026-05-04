@@ -49,7 +49,7 @@ cd dropimg
 
 ### What the script does:
 1. **Docker Check:** Automatically installs Docker and Docker Compose if they aren't found.
-2. **Interactive Configuration:** Prompts you for App Name, Port, Public URL, and Admin Token.
+2. **Interactive Configuration:** Prompts you for App Name, Port, Public URL, Admin Token, and optional background-removal API access.
 3. **Authentication Choice:** You can choose between a private setup (User Auth + Admin Access) or a Public Mode (No mandatory login).
 4. **Storage Provisioning:** Initializes **Garage S3**, creates the `dropimg` bucket, and generates access keys.
 5. **Environment Setup:** Creates a `.env` file with all your settings.
@@ -95,7 +95,7 @@ To update DropImg to the latest version while preserving your data:
 - **Private Galleries:** Every user has their own private gallery. You only see what you upload.
 - **Admin Dashboard:** Privileged access to view and manage all images across the entire platform.
 - **Instant Upload:** Support for Drag & Drop and Clipboard Paste.
-- **Built-in Image Tools:** Compress JPGs or convert PNGs to JPG directly from the uploader.
+- **Built-in Image Tools:** Compress JPGs, convert PNGs to JPG, strip metadata, or remove backgrounds directly from the uploader.
 - **Modern Stack:** React 19, Vite 8, Hono, and Tailwind CSS 4.
 - **S3-Compatible Storage:** Built-in integration with [Garage](https://garagehq.deuxfleurs.fr/).
 - **SQLite + Drizzle:** Zero-config metadata storage with automatic migrations and ownership tracking.
@@ -183,6 +183,7 @@ If you are configuring manually, add these to your `.env`:
 graph TD
     User([User]) -->|Browser| Web[React / Vite Frontend]
     Web -->|API Requests| API[Hono API / Node.js]
+    API -->|Background removal proxy| Photoroom[Photoroom API]
     API -->|Metadata| DB[(SQLite DB)]
     API -->|Object Storage| S3[(Garage S3 / Local Disk)]
 ```
@@ -222,6 +223,24 @@ Environment variables can be managed in `docker-compose.yml` or a `.env` file.
 | `PUBLIC_MODE` | If `true`, disables mandatory authentication (Backend) | `false` |
 | `VITE_PUBLIC_MODE` | If `true`, hides auth UI elements (Frontend) | `false` |
 | `ADMIN_TOKEN` | Token for administrative tasks | `change-me` |
+| `PHOTOROOM_API_KEY` | Enables `Remove Background` mode through the Photoroom API | `` |
+| `PHOTOROOM_API_URL` | Override for the Photoroom remove-background endpoint | `https://sdk.photoroom.com/v1/segment` |
+| `PHOTOROOM_OUTPUT_FORMAT` | Output format requested from Photoroom (`png` or `webp`) | `png` |
+
+### Background Removal
+
+DropImg now supports a `Remove Background` upload mode. The browser still only handles file selection and preview, while the Hono backend proxies the source image to Photoroom, keeps the API key server-side, and stores the cutout result as the hosted primary asset.
+
+```text
+Browser upload
+  -> Hono /api/upload (mode=remove-background)
+  -> Photoroom remove-background API
+  -> DropImg storage + responsive variants
+```
+
+This mode currently accepts PNG, JPG, and WEBP uploads. Set `PHOTOROOM_API_KEY` before using it; otherwise the backend will reject the request as unconfigured.
+
+If you use `./install.sh`, the installer now asks whether to enable the Photoroom integration and only requests the API key when you opt in.
 
 ---
 

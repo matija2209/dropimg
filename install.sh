@@ -87,6 +87,32 @@ else
     BETTER_AUTH_URL=""
 fi
 
+# Background Removal Configuration
+echo ""
+echo "🪄 Background Removal Setup"
+read -p "Do you want to enable the 3rd-party background removal service (Photoroom)? (y/N): " ENABLE_BACKGROUND_REMOVAL
+ENABLE_BACKGROUND_REMOVAL=${ENABLE_BACKGROUND_REMOVAL:-n}
+
+if [[ "$ENABLE_BACKGROUND_REMOVAL" =~ ^[Yy]$ ]]; then
+    read -p "Enter your Photoroom API Key: " PHOTOROOM_API_KEY
+
+    if [ -n "$PHOTOROOM_API_KEY" ]; then
+        PHOTOROOM_API_URL="https://sdk.photoroom.com/v1/segment"
+        PHOTOROOM_OUTPUT_FORMAT="png"
+        echo "   Photoroom background removal enabled."
+    else
+        echo "   No API key provided. Background removal will be skipped."
+        PHOTOROOM_API_KEY=""
+        PHOTOROOM_API_URL=""
+        PHOTOROOM_OUTPUT_FORMAT=""
+        ENABLE_BACKGROUND_REMOVAL=n
+    fi
+else
+    PHOTOROOM_API_KEY=""
+    PHOTOROOM_API_URL=""
+    PHOTOROOM_OUTPUT_FORMAT=""
+fi
+
 # Storage Port Configuration
 echo ""
 echo "📦 Storage Port Configuration (External mappings)"
@@ -139,6 +165,20 @@ else
     cat <<EOF >> .env
 # BETTER_AUTH_SECRET=
 # BETTER_AUTH_URL=
+EOF
+fi
+
+if [[ "$ENABLE_BACKGROUND_REMOVAL" =~ ^[Yy]$ ]]; then
+    cat <<EOF >> .env
+PHOTOROOM_API_KEY=$PHOTOROOM_API_KEY
+PHOTOROOM_API_URL=$PHOTOROOM_API_URL
+PHOTOROOM_OUTPUT_FORMAT=$PHOTOROOM_OUTPUT_FORMAT
+EOF
+else
+    cat <<EOF >> .env
+# PHOTOROOM_API_KEY=
+# PHOTOROOM_API_URL=https://sdk.photoroom.com/v1/segment
+# PHOTOROOM_OUTPUT_FORMAT=png
 EOF
 fi
 
@@ -210,6 +250,11 @@ echo "📍 Application URL: $APP_URL"
 echo "🔌 External Port:  $APP_PORT"
 echo "📦 Garage S3 Port: $GARAGE_S3_PORT"
 echo "🛡️  Admin Token:   $ADMIN_TOKEN"
+if [[ "$ENABLE_BACKGROUND_REMOVAL" =~ ^[Yy]$ ]]; then
+    echo "🪄 Background Removal: Enabled (Photoroom)"
+else
+    echo "🪄 Background Removal: Skipped"
+fi
 echo ""
 if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then
     echo "☁️  Cloudflare Tunnel is enabled."

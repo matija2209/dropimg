@@ -20,6 +20,11 @@ export const config = {
     secret: process.env.BETTER_AUTH_SECRET || 'a-very-secret-key-at-least-32-chars-long',
     url: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
   },
+  photoroom: {
+    apiKey: process.env.PHOTOROOM_API_KEY || '',
+    apiUrl: process.env.PHOTOROOM_API_URL || 'https://sdk.photoroom.com/v1/segment',
+    outputFormat: process.env.PHOTOROOM_OUTPUT_FORMAT || 'png',
+  },
   s3: {
     endpoint: process.env.S3_ENDPOINT || '',
     region: process.env.S3_REGION || 'us-east-1',

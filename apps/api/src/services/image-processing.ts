@@ -35,8 +35,9 @@ export const variantPresets = [
 
 export type StaticVariantName = (typeof variantPresets)[number]['name'];
 export type VariantName = StaticVariantName | 'original';
-export const uploadModes = ['upload', 'compress-jpg', 'png-to-jpg', 'strip-metadata'] as const;
+export const uploadModes = ['upload', 'compress-jpg', 'png-to-jpg', 'strip-metadata', 'remove-background'] as const;
 export type UploadMode = (typeof uploadModes)[number];
+type QualityMode = keyof typeof QUALITY_BY_MODE;
 
 type VariantOutput = {
   variant: StaticVariantName;
@@ -97,6 +98,7 @@ type TransformResult = {
 };
 
 const OUTPUT_MIME_TYPES = {
+  png: 'image/png',
   jpeg: 'image/jpeg',
   webp: 'image/webp',
 } as const;
@@ -108,7 +110,18 @@ const ORIGINAL_EXTENSION_BY_MIME: Record<string, string> = {
   'image/webp': '.webp',
 };
 
-const QUALITY_BY_MODE: Record<Exclude<UploadMode, 'upload'>, QualityRange> = {
+const MIME_TYPE_BY_SHARP_FORMAT: Record<string, string> = {
+  gif: 'image/gif',
+  heif: 'image/heif',
+  jpeg: OUTPUT_MIME_TYPES.jpeg,
+  jpg: OUTPUT_MIME_TYPES.jpeg,
+  png: OUTPUT_MIME_TYPES.png,
+  webp: OUTPUT_MIME_TYPES.webp,
+};
+
+const BACKGROUND_REMOVAL_INPUT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+const QUALITY_BY_MODE = {
   'compress-jpg': {
     min: 60,
     max: 92,
@@ -124,12 +137,12 @@ const QUALITY_BY_MODE: Record<Exclude<UploadMode, 'upload'>, QualityRange> = {
     max: 100,
     default: 100,
   },
-};
+} as const satisfies Record<'compress-jpg' | 'png-to-jpg' | 'strip-metadata', QualityRange>;
 
 export class ImageProcessingError extends Error {
-  statusCode: 400;
+  statusCode: number;
 
-  constructor(message: string, statusCode: 400 = 400) {
+  constructor(message: string, statusCode = 400) {
     super(message);
     this.name = 'ImageProcessingError';
     this.statusCode = statusCode;
@@ -143,6 +156,11 @@ export async function processAndStoreImage(input: {
   buffer: Buffer;
   mode: UploadMode;
   quality?: number;
+  backgroundRemoval?: {
+    apiKey?: string;
+    apiUrl?: string;
+    outputFormat?: string;
+  };
   storage: StorageDriver;
 }): Promise<ProcessedImage> {
   const sourceMetadata = await sharp(input.buffer, { animated: true }).metadata();
@@ -152,6 +170,8 @@ export async function processAndStoreImage(input: {
     mode: input.mode,
     quality: input.quality,
     metadata: sourceMetadata,
+    fileName: input.fileName,
+    backgroundRemoval: input.backgroundRemoval,
   });
   const generatedVariants: GeneratedVariantFile[] =
     !transformed.isAnimated && transformed.width && transformed.height
@@ -221,6 +241,12 @@ async function transformCanonicalImage(input: {
   mode: UploadMode;
   quality?: number;
   metadata: sharp.Metadata;
+  fileName: string;
+  backgroundRemoval?: {
+    apiKey?: string;
+    apiUrl?: string;
+    outputFormat?: string;
+  };
 }): Promise<TransformResult> {
   const width = input.metadata.width ?? null;
   const height = input.metadata.height ?? null;
@@ -245,6 +271,34 @@ async function transformCanonicalImage(input: {
       width: newMetadata.width ?? width,
       height: newMetadata.height ?? height,
       isAnimated,
+    };
+  }
+
+  if (input.mode === 'remove-background') {
+    if (!BACKGROUND_REMOVAL_INPUT_MIME_TYPES.has(input.mimeType)) {
+      throw new ImageProcessingError('Background removal only accepts PNG, JPG, and WEBP uploads.');
+    }
+
+    if (isAnimated) {
+      throw new ImageProcessingError('Animated image uploads are not supported for background removal.');
+    }
+
+    const removed = await removeBackgroundWithPhotoroom({
+      buffer: input.buffer,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      apiKey: input.backgroundRemoval?.apiKey,
+      apiUrl: input.backgroundRemoval?.apiUrl,
+      outputFormat: input.backgroundRemoval?.outputFormat,
+    });
+    const removedMetadata = await sharp(removed.buffer).metadata();
+
+    return {
+      buffer: removed.buffer,
+      mimeType: removed.mimeType,
+      width: removedMetadata.width ?? width,
+      height: removedMetadata.height ?? height,
+      isAnimated: false,
     };
   }
 
@@ -419,7 +473,7 @@ function getOriginalExtension(mimeType: string, fileName: string): string {
   return fileExtension || '.bin';
 }
 
-function resolveQuality(mode: Exclude<UploadMode, 'upload'>, quality?: number): number {
+function resolveQuality(mode: QualityMode, quality?: number): number {
   const config = QUALITY_BY_MODE[mode];
 
   if (quality === undefined || Number.isNaN(quality)) {
@@ -457,11 +511,81 @@ function buildProcessingSummary(input: {
   };
 }
 
-function describeMode(mode: Exclude<UploadMode, 'upload'>): string {
+function describeMode(mode: QualityMode): string {
   if (mode === 'strip-metadata') {
     return 'Strip Metadata';
   }
   return mode === 'compress-jpg' ? 'Compress JPG' : 'PNG to JPG';
+}
+
+async function removeBackgroundWithPhotoroom(input: {
+  buffer: Buffer;
+  fileName: string;
+  mimeType: string;
+  apiKey?: string;
+  apiUrl?: string;
+  outputFormat?: string;
+}): Promise<{ buffer: Buffer; mimeType: string }> {
+  if (!input.apiKey) {
+    throw new ImageProcessingError('Background removal is not configured on this server.', 500);
+  }
+
+  const formData = new FormData();
+  formData.append(
+    'image_file',
+    new Blob([Uint8Array.from(input.buffer)], { type: input.mimeType }),
+    input.fileName || 'image'
+  );
+
+  if (input.outputFormat && ['png', 'webp'].includes(input.outputFormat)) {
+    formData.append('output_format', input.outputFormat);
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(input.apiUrl || 'https://sdk.photoroom.com/v1/segment', {
+      method: 'POST',
+      headers: {
+        'x-api-key': input.apiKey,
+      },
+      body: formData,
+    });
+  } catch {
+    throw new ImageProcessingError('Background removal provider could not be reached.', 502);
+  }
+
+  if (!response.ok) {
+    throw new ImageProcessingError(
+      `Background removal failed with provider status ${response.status}.`,
+      response.status >= 500 ? 502 : 400
+    );
+  }
+
+  const outputBuffer = Buffer.from(await response.arrayBuffer());
+  const mimeType = await resolveOutputMimeType(outputBuffer, response.headers.get('content-type'));
+
+  return {
+    buffer: outputBuffer,
+    mimeType,
+  };
+}
+
+async function resolveOutputMimeType(buffer: Buffer, contentTypeHeader: string | null): Promise<string> {
+  const headerMimeType = contentTypeHeader?.split(';', 1)[0]?.trim();
+
+  if (headerMimeType?.startsWith('image/')) {
+    return headerMimeType;
+  }
+
+  const metadata = await sharp(buffer).metadata();
+  const byFormat = metadata.format ? MIME_TYPE_BY_SHARP_FORMAT[metadata.format] : undefined;
+
+  if (byFormat) {
+    return byFormat;
+  }
+
+  return OUTPUT_MIME_TYPES.png;
 }
 
 async function stripMetadata(buffer: Buffer): Promise<Buffer> {

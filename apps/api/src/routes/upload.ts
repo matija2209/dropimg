@@ -34,7 +34,8 @@ upload.post('/', async (c) => {
     quality = parseQuality(body['quality']);
   } catch (error) {
     if (error instanceof ImageProcessingError) {
-      return c.json({ error: error.message }, error.statusCode);
+      c.status(error.statusCode as 400 | 500 | 502);
+      return c.json({ error: error.message });
     }
 
     throw error;
@@ -66,11 +67,17 @@ upload.post('/', async (c) => {
       buffer,
       mode,
       quality,
+      backgroundRemoval: {
+        apiKey: config.photoroom.apiKey,
+        apiUrl: config.photoroom.apiUrl,
+        outputFormat: config.photoroom.outputFormat,
+      },
       storage,
     });
   } catch (error) {
     if (error instanceof ImageProcessingError) {
-      return c.json({ error: error.message }, error.statusCode);
+      c.status(error.statusCode as 400 | 500 | 502);
+      return c.json({ error: error.message });
     }
 
     throw error;

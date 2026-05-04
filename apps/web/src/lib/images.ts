@@ -1,5 +1,5 @@
 export type VariantName = 'thumbnail' | 'card' | 'tablet' | 'social';
-export type UploadMode = 'upload' | 'compress-jpg' | 'png-to-jpg' | 'strip-metadata';
+export type UploadMode = 'upload' | 'compress-jpg' | 'png-to-jpg' | 'strip-metadata' | 'remove-background';
 
 export interface ImageRendition {
   url: string;

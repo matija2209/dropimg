@@ -179,6 +179,82 @@ test('strip-metadata runs through the stripping pipeline', async () => {
   assert.ok(processed.original.size > 0);
 });
 
+test('remove-background proxies through the configured provider and stores a transparent PNG', async () => {
+  const storage = new MemoryStorageDriver();
+  const source = await createPatternJpeg(64, 64, 90);
+  const cutout = await sharp({
+    create: {
+      width: 64,
+      height: 64,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .png()
+    .toBuffer();
+
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input, init) => {
+    assert.equal(input, 'https://example.com/remove-bg');
+    assert.equal(init?.method, 'POST');
+    assert.equal((init?.headers as Record<string, string>)['x-api-key'], 'test-key');
+    assert.ok(init?.body instanceof FormData);
+
+    return new Response(Uint8Array.from(cutout), {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+      },
+    });
+  };
+
+  try {
+    const processed = await processAndStoreImage({
+      id: 'remove-background',
+      fileName: 'subject.jpg',
+      mimeType: 'image/jpeg',
+      buffer: source,
+      mode: 'remove-background',
+      backgroundRemoval: {
+        apiKey: 'test-key',
+        apiUrl: 'https://example.com/remove-bg',
+        outputFormat: 'png',
+      },
+      storage,
+    });
+
+    assert.equal(processed.original.mimeType, 'image/png');
+    assert.ok(processed.original.storageKey.endsWith('/original.png'));
+    assert.equal(processed.processing.mode, 'remove-background');
+    assert.equal(processed.processing.sourceMimeType, 'image/jpeg');
+    assert.equal(processed.processing.outputMimeType, 'image/png');
+    assert.ok(processed.variants.length > 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('remove-background requires server configuration', async () => {
+  const storage = new MemoryStorageDriver();
+  const source = await createPatternJpeg(64, 64, 90);
+
+  await assert.rejects(
+    processAndStoreImage({
+      id: 'remove-background-missing-config',
+      fileName: 'subject.jpg',
+      mimeType: 'image/jpeg',
+      buffer: source,
+      mode: 'remove-background',
+      storage,
+    }),
+    (error: unknown) =>
+      error instanceof ImageProcessingError &&
+      error.statusCode === 500 &&
+      error.message === 'Background removal is not configured on this server.'
+  );
+});
+
 test('png-to-jpg rejects non-PNG uploads', async () => {
   const storage = new MemoryStorageDriver();
   const source = await createPatternJpeg(48, 48, 90);

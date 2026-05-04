@@ -24,6 +24,9 @@ services:
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
       BETTER_AUTH_URL: "https://img.buildwithmatija.com"
       VITE_API_URL: "https://img.buildwithmatija.com"
+      PHOTOROOM_API_KEY: "${PHOTOROOM_API_KEY:-}"
+      PHOTOROOM_API_URL: "${PHOTOROOM_API_URL:-https://sdk.photoroom.com/v1/segment}"
+      PHOTOROOM_OUTPUT_FORMAT: "${PHOTOROOM_OUTPUT_FORMAT:-png}"
       
       # S3 configuration (Defaulting to internal Garage service)
       S3_ENDPOINT: "http://garage:3900"

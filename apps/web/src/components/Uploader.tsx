@@ -77,6 +77,14 @@ const MODE_CONFIG: Record<UploadMode, ModeConfig> = {
     accept: 'image/png,image/jpeg,image/webp',
     acceptedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
   },
+  'remove-background': {
+    label: 'Remove Background',
+    title: 'Drop product image here',
+    description: 'Proxy the upload through Photoroom and host the cutout result.',
+    helper: 'PNG, JPG, and WEBP only. Requires PHOTOROOM_API_KEY on the backend.',
+    accept: 'image/png,image/jpeg,image/webp',
+    acceptedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+  },
 };
 
 import { NoSession } from './NoSession';
@@ -545,6 +553,10 @@ function validateFileForMode(file: File, mode: UploadMode): string | null {
     return 'PNG to JPG mode only accepts PNG files.';
   }
 
+  if (mode === 'remove-background') {
+    return 'Background removal only accepts PNG, JPG, and WEBP files.';
+  }
+
   return 'Upload mode supports PNG, JPG, WEBP, and GIF files.';
 }
 
@@ -563,6 +575,10 @@ function getProcessingHeadline(processing: ProcessingSummary): string {
     return 'Converted PNG to JPG';
   }
 
+  if (processing.mode === 'remove-background') {
+    return 'Removed the background with the configured API';
+  }
+
   return 'Hosted the original upload';
 }
 
@@ -573,6 +589,10 @@ function getProcessingNote(processing: ProcessingSummary): string | null {
 
   if (processing.mode === 'png-to-jpg') {
     return 'Transparency flattened onto white';
+  }
+
+  if (processing.mode === 'remove-background') {
+    return 'Returned the cutout as the hosted primary asset';
   }
 
   return null;
