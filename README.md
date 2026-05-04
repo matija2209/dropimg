@@ -12,13 +12,25 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2024-brightgreen.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com/)
 
-[Quick Start](#quick-start) • [Features](#features) • [Architecture](#architecture) • [Development](#development) • [Contributing](#contributing)
+[Quick Start](#quick-start) • [Features](#features) • [Roadmap](ROADMAP.md) • [Architecture](#architecture) • [Development](#development) • [Contributing](#contributing)
 
 </div>
 
 ---
 
 **DropImg** is built for simplicity and speed. It allows you to drag, drop, or paste images to get instant public URLs for sharing. It follows a modern "single app" architecture, combining a React frontend with a Hono backend, backed by SQLite for metadata and S3-compatible storage (Garage) for files.
+
+## Roadmap
+
+We have an ambitious plan to evolve DropImg into a production-ready image platform. Key future features include:
+- **AI Image Naming:** SEO-friendly name generation using LLMs.
+- **Rate Limiting:** IP and endpoint-based usage controls.
+- **BullMQ Background Jobs:** Asynchronous processing for long-running AI tasks.
+- **Privileged Access:** Super admin controls and operation monitoring.
+
+Check out the full [**ROADMAP.md**](ROADMAP.md) for details on our phases and priorities.
+
+---
 
 ## Quick Start
 
