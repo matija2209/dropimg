@@ -66,6 +66,20 @@ To remove the application and stop all services:
 - `./uninstall.sh --yes`: Non-interactive, deletes **everything** (containers, data, and config).
 - `./uninstall.sh --keep-data`: Non-interactive, stops services but **preserves** all files.
 
+### Updating
+To update DropImg to the latest version while preserving your data:
+
+1. **Pull the latest changes:**
+   ```bash
+   git pull origin main
+   ```
+2. **Rebuild and restart:**
+   ```bash
+   docker compose up --build -d
+   ```
+
+*Note: Database migrations are applied automatically by the API service on startup. Your existing S3 credentials and database will be preserved.*
+
 ---
 
 ## Features
