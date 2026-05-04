@@ -18,7 +18,7 @@ find_available_port() {
     echo $port
 }
 
-# 1. Install Docker if missing
+# 1. Install Docker and ExifTool if missing
 if ! command -v docker &> /dev/null; then
     echo "🐳 Docker not found. Installing Docker..."
     curl -fsSL https://get.docker.com -o get-docker.sh
@@ -27,6 +27,22 @@ if ! command -v docker &> /dev/null; then
     echo "✅ Docker installed."
 else
     echo "✅ Docker is already installed."
+fi
+
+if ! command -v exiftool &> /dev/null; then
+    echo "📸 ExifTool not found. Installing ExifTool..."
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y perl-Image-ExifTool
+    elif command -v dnf &> /dev/null; then
+        sudo dnf install -y perl-Image-ExifTool
+    else
+        echo "⚠️  Could not detect package manager. Please install ExifTool manually if needed."
+    fi
+    echo "✅ ExifTool installed."
+else
+    echo "✅ ExifTool is already installed."
 fi
 
 # 2. Gather Configuration

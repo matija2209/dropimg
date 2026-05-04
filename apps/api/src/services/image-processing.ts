@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { extname } from 'node:path';
+import { spawn } from 'node:child_process';
 import type { StorageDriver } from '../storage/types.js';
 
 export const variantPresets = [
@@ -34,7 +35,7 @@ export const variantPresets = [
 
 export type StaticVariantName = (typeof variantPresets)[number]['name'];
 export type VariantName = StaticVariantName | 'original';
-export const uploadModes = ['upload', 'compress-jpg', 'png-to-jpg'] as const;
+export const uploadModes = ['upload', 'compress-jpg', 'png-to-jpg', 'strip-metadata'] as const;
 export type UploadMode = (typeof uploadModes)[number];
 
 type VariantOutput = {
@@ -226,6 +227,18 @@ async function transformCanonicalImage(input: {
       mimeType: input.mimeType,
       width,
       height,
+      isAnimated,
+    };
+  }
+
+  if (input.mode === 'strip-metadata') {
+    const stripped = await stripMetadata(input.buffer);
+    const newMetadata = await sharp(stripped).metadata();
+    return {
+      buffer: stripped,
+      mimeType: input.mimeType,
+      width: newMetadata.width ?? width,
+      height: newMetadata.height ?? height,
       isAnimated,
     };
   }
@@ -440,5 +453,62 @@ function buildProcessingSummary(input: {
 }
 
 function describeMode(mode: Exclude<UploadMode, 'upload'>): string {
+  if (mode === 'strip-metadata') {
+    return 'Strip Metadata';
+  }
   return mode === 'compress-jpg' ? 'Compress JPG' : 'PNG to JPG';
+}
+
+async function stripMetadata(buffer: Buffer): Promise<Buffer> {
+  const metadata = await sharp(buffer).metadata();
+  const format = metadata.format;
+
+  return new Promise((resolve) => {
+    const child = spawn('exiftool', ['-all=', '-o', '-', '-']);
+    const chunks: Buffer[] = [];
+
+    child.stdout.on('data', (chunk) => chunks.push(chunk));
+    child.on('error', () => {
+      // If exiftool is not found, fallback to sharp
+      fallbackToSharp(buffer, format).then(resolve);
+    });
+
+    child.on('close', (code) => {
+      if (code === 0 && chunks.length > 0) {
+        resolve(Buffer.concat(chunks));
+      } else {
+        // Fallback to sharp
+        fallbackToSharp(buffer, format).then(resolve);
+      }
+    });
+
+    child.stdin.write(buffer);
+    child.stdin.end();
+  });
+}
+
+async function fallbackToSharp(buffer: Buffer, format?: string): Promise<Buffer> {
+  try {
+    let pipeline = sharp(buffer).rotate();
+
+    if (format === 'jpeg') {
+      pipeline = pipeline.jpeg({ quality: 90, mozjpeg: true });
+    } else if (format === 'png') {
+      pipeline = pipeline.png({ compressionLevel: 9, palette: true });
+    } else if (format === 'webp') {
+      pipeline = pipeline.webp({ quality: 85 });
+    }
+
+    const stripped = await pipeline.toBuffer();
+    
+    // If the "stripped" version is significantly larger (more than 20% increase), 
+    // it's likely a poor conversion. 
+    if (stripped.length > buffer.length * 1.2) {
+      return buffer;
+    }
+
+    return stripped;
+  } catch {
+    return buffer;
+  }
 }

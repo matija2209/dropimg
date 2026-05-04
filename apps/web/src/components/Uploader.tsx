@@ -68,6 +68,14 @@ const MODE_CONFIG: Record<UploadMode, ModeConfig> = {
       max: 95,
     },
   },
+  'strip-metadata': {
+    label: 'Privacy Strip',
+    title: 'Drop image to strip',
+    description: 'Remove C2PA data, EXIF, and all other metadata for privacy.',
+    helper: 'Supports PNG, JPG, and WEBP. Recommended for privacy-sensitive uploads.',
+    accept: 'image/png,image/jpeg,image/webp',
+    acceptedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+  },
 };
 
 export const Uploader: React.FC = () => {
@@ -518,6 +526,10 @@ function validateFileForMode(file: File, mode: UploadMode): string | null {
 }
 
 function getProcessingHeadline(processing: ProcessingSummary): string {
+  if (processing.mode === 'strip-metadata') {
+    return 'Stripped all metadata (including C2PA)';
+  }
+
   if (processing.mode === 'compress-jpg') {
     return processing.savedBytes > 0
       ? `Compressed JPG by ${processing.savedPercent}%`

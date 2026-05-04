@@ -161,6 +161,24 @@ test('png-to-jpg converts PNG uploads to canonical JPG and flattens transparency
   assert.ok(data[2] > 240);
 });
 
+test('strip-metadata runs through the stripping pipeline', async () => {
+  const storage = new MemoryStorageDriver();
+  const source = await createPatternJpeg(128, 128, 90);
+
+  const processed = await processAndStoreImage({
+    id: 'strip-test',
+    fileName: 'photo.jpg',
+    mimeType: 'image/jpeg',
+    buffer: source,
+    mode: 'strip-metadata',
+    storage,
+  });
+
+  assert.equal(processed.original.mimeType, 'image/jpeg');
+  assert.equal(processed.processing.mode, 'strip-metadata');
+  assert.ok(processed.original.size > 0);
+});
+
 test('png-to-jpg rejects non-PNG uploads', async () => {
   const storage = new MemoryStorageDriver();
   const source = await createPatternJpeg(48, 48, 90);
