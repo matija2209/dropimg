@@ -10,3 +10,5 @@ apps/api/dist
 9e396975-99a6-4af3-9e4a-e4aff1bb50f8.json
 .garage_secrets
 *.json
+.agents/
+.claude/

@@ -4,9 +4,16 @@ import { imageVariants, images } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { storage, config } from '../config.js';
 import { serializeImageAsset } from '../lib/image-assets.js';
+import { authMiddleware } from '../lib/middleware.js';
 import type { VariantName } from '../services/image-processing.js';
+import type { auth } from '../lib/auth.js';
 
-const imagesRoute = new Hono();
+const imagesRoute = new Hono<{
+  Variables: {
+    user: typeof auth.$Infer.Session.user;
+    session: typeof auth.$Infer.Session.session;
+  };
+}>();
 
 imagesRoute.get('/:id/base64/:variant', async (c) => {
   const image = await db.query.images.findFirst({
@@ -147,9 +154,12 @@ imagesRoute.get('/:id/auto', async (c) => {
   }
 });
 
-// List all images
-imagesRoute.get('/', async (c) => {
+// List all images (Filtered by user unless admin)
+imagesRoute.get('/', authMiddleware, async (c) => {
+  const user = c.get('user');
+  
   const allImages = await db.query.images.findMany({
+    where: user.role === 'admin' ? undefined : eq(images.userId, user.id),
     orderBy: (images, { desc }) => [desc(images.createdAt)],
     with: {
       variants: true,
@@ -176,9 +186,10 @@ imagesRoute.get('/:id', async (c) => {
   return c.json(serializeImageAsset(image));
 });
 
-// Delete image
-imagesRoute.delete('/:id', async (c) => {
+// Delete image (Permission check: owner or admin)
+imagesRoute.delete('/:id', authMiddleware, async (c) => {
   const id = c.req.param('id');
+  const user = c.get('user');
   const token = c.req.query('token');
 
   const image = await db.query.images.findFirst({
@@ -192,7 +203,15 @@ imagesRoute.delete('/:id', async (c) => {
     return c.json({ error: 'Image not found' }, 404);
   }
 
-  if (token !== image.deleteToken && token !== config.adminToken) {
+  // Allow delete if:
+  // 1. Correct delete token is provided (stateless)
+  // 2. User is the owner
+  // 3. User is an admin
+  const isOwner = image.userId === user.id;
+  const isAdmin = user.role === 'admin';
+  const hasToken = token === image.deleteToken || token === config.adminToken;
+
+  if (!hasToken && !isOwner && !isAdmin) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
@@ -209,7 +228,7 @@ imagesRoute.delete('/:id', async (c) => {
 });
 
 function resolveVariant(
-  image: Awaited<ReturnType<typeof db.query.images.findFirst>> & { variants: typeof imageVariants.$inferSelect[] },
+  image: any,
   requestedVariant: string
 ) {
   if (requestedVariant === 'original') {
@@ -220,7 +239,7 @@ function resolveVariant(
     };
   }
 
-  const variant = image.variants.find((entry) => entry.variant === requestedVariant);
+  const variant = image.variants.find((entry: any) => entry.variant === requestedVariant);
 
   if (!variant) {
     return null;

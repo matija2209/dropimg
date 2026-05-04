@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Check, Copy, Image as ImageIcon, SlidersHorizontal, Trash2, Type, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSession } from '../lib/auth-client';
 import {
   formatDimensions,
   formatMimeLabel,
@@ -78,7 +79,10 @@ const MODE_CONFIG: Record<UploadMode, ModeConfig> = {
   },
 };
 
+import { NoSession } from './NoSession';
+
 export const Uploader: React.FC = () => {
+  const { data: session, isPending: isSessionLoading } = useSession();
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<UploadResponse | null>(null);
@@ -90,6 +94,25 @@ export const Uploader: React.FC = () => {
   const [pngToJpgQuality, setPngToJpgQuality] = useState(90);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (isSessionLoading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <NoSession 
+        icon={Upload}
+        title="Login Required"
+        description="Please sign in to your account to upload and manage your private image gallery."
+        buttonText="Sign In to DropImg"
+      />
+    );
+  }
 
   const activeMode = MODE_CONFIG[mode];
   const currentQuality =

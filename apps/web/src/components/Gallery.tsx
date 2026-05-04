@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { ExternalLink, Calendar, HardDrive, Copy, Check } from 'lucide-react';
+import { ExternalLink, Calendar, HardDrive, Copy, Check, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDimensions, formatSize, getDisplayName, getPreviewUrl, type ImageAsset } from '../lib/images';
+import { useSession } from '../lib/auth-client';
+
+import { NoSession } from './NoSession';
 
 export const Gallery: React.FC = () => {
+  const { data: session, isPending: isSessionLoading } = useSession();
   const [images, setImages] = useState<ImageAsset[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!session) return;
+    
     let isCancelled = false;
 
     void (async () => {
@@ -22,17 +27,13 @@ export const Gallery: React.FC = () => {
         }
       } catch (error) {
         console.error('Error fetching images:', error);
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
       }
     })();
 
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [session]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -40,11 +41,22 @@ export const Gallery: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  if (isLoading) {
+  if (isSessionLoading) {
     return (
       <div className="flex justify-center items-center py-20">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <NoSession 
+        icon={Lock}
+        title="Private Gallery"
+        description="Sign in to view and manage your uploaded images. Your assets are kept private to your account."
+        buttonText="Access Your Gallery"
+      />
     );
   }
 

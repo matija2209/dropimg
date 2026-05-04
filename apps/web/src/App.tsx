@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, LogIn, LogOut, Shield } from 'lucide-react';
 import { Uploader } from './components/Uploader';
 import { Gallery } from './components/Gallery';
 import { ImagePreview } from './components/ImagePreview';
+import { Login } from './components/Login';
+import { Admin } from './components/Admin';
+import { useSession, signOut } from './lib/auth-client';
 
 const APP_NAME = import.meta.env.VITE_APP_NAME || 'DropImg';
 
@@ -16,6 +19,8 @@ function App() {
     }
     return false;
   });
+
+  const { data: session } = useSession();
 
   useEffect(() => {
     document.title = APP_NAME;
@@ -35,11 +40,16 @@ function App() {
 
   const toggleTheme = () => setIsDark(!isDark);
 
+  const handleLogout = async () => {
+    await signOut();
+    window.location.reload();
+  };
+
   return (
     <BrowserRouter>
       <div className="min-h-screen w-full bg-gray-50 dark:bg-gray-950 flex flex-col items-center py-12 px-4 transition-colors duration-300">
         <header className="mb-12 text-center w-full max-w-6xl relative">
-          <div className="absolute right-0 top-1/2 -translate-y-1/2">
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-3">
              <button 
                onClick={toggleTheme}
                className="p-2 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm"
@@ -47,6 +57,24 @@ function App() {
              >
                {isDark ? <Sun size={20} /> : <Moon size={20} />}
              </button>
+             
+             {session ? (
+               <button 
+                 onClick={handleLogout}
+                 className="p-2 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all shadow-sm"
+                 title="Sign Out"
+               >
+                 <LogOut size={20} />
+               </button>
+             ) : (
+               <Link 
+                 to="/login"
+                 className="p-2 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm"
+                 title="Sign In"
+               >
+                 <LogIn size={20} />
+               </Link>
+             )}
           </div>
           
           <Link to="/" className="inline-block">
@@ -69,6 +97,12 @@ function App() {
             <Link to="/assets" className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition">
               Gallery
             </Link>
+            {session && (session.user as any).role === 'admin' && (
+              <Link to="/admin" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 transition">
+                <Shield size={14} />
+                Admin
+              </Link>
+            )}
           </nav>
         </header>
 
@@ -77,6 +111,8 @@ function App() {
             <Route path="/" element={<Uploader />} />
             <Route path="/assets" element={<Gallery />} />
             <Route path="/i/:id" element={<ImagePreview />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/admin" element={<Admin />} />
           </Routes>
         </main>
 

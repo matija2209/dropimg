@@ -3,16 +3,26 @@ import { db } from '../db/client.js';
 import { imageVariants, images } from '../db/schema.js';
 import { storage, config } from '../config.js';
 import { serializeImageAsset } from '../lib/image-assets.js';
+import { authMiddleware } from '../lib/middleware.js';
 import {
   ImageProcessingError,
   processAndStoreImage,
   uploadModes,
   type UploadMode,
 } from '../services/image-processing.js';
+import type { auth } from '../lib/auth.js';
 
-const upload = new Hono();
+const upload = new Hono<{
+  Variables: {
+    user: typeof auth.$Infer.Session.user;
+    session: typeof auth.$Infer.Session.session;
+  };
+}>();
+
+upload.use('*', authMiddleware);
 
 upload.post('/', async (c) => {
+  const user = c.get('user');
   const body = await c.req.parseBody();
   const file = body['file'] as File;
   const altName = typeof body['altName'] === 'string' ? body['altName'].trim() : '';
@@ -78,6 +88,7 @@ upload.post('/', async (c) => {
         height: processed.original.height,
         isAnimated: processed.isAnimated,
         deleteToken,
+        userId: user.id,
         createdAt: new Date(),
       }).run();
 
@@ -114,6 +125,7 @@ upload.post('/', async (c) => {
       height: processed.original.height,
       isAnimated: processed.isAnimated,
       deleteToken,
+      userId: user.id,
       createdAt: new Date(),
       variants: processed.variants.map((variant) => ({
         imageId: id,

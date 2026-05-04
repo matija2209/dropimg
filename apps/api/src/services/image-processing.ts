@@ -119,6 +119,11 @@ const QUALITY_BY_MODE: Record<Exclude<UploadMode, 'upload'>, QualityRange> = {
     max: 95,
     default: 90,
   },
+  'strip-metadata': {
+    min: 80,
+    max: 100,
+    default: 100,
+  },
 };
 
 export class ImageProcessingError extends Error {

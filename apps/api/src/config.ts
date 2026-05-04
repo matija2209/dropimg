@@ -15,6 +15,10 @@ export const config = {
   allowedTypes: (process.env.ALLOWED_TYPES || 'image/png,image/jpeg,image/webp,image/gif').split(','),
   publicUploads: process.env.PUBLIC_UPLOADS === 'true',
   adminToken: process.env.ADMIN_TOKEN || 'change-me',
+  auth: {
+    secret: process.env.BETTER_AUTH_SECRET || 'a-very-secret-key-at-least-32-chars-long',
+    url: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+  },
   s3: {
     endpoint: process.env.S3_ENDPOINT || '',
     region: process.env.S3_REGION || 'us-east-1',

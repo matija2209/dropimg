@@ -22,6 +22,13 @@
       "when": 1777797488065,
       "tag": "0002_hot_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1777888700161,
+      "tag": "0003_equal_the_fallen",
+      "breakpoints": true
     }
   ]
 }

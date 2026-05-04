@@ -70,6 +70,21 @@ if [ -z "$ADMIN_TOKEN" ]; then
     echo "   Generated Admin Token: $ADMIN_TOKEN"
 fi
 
+# Auth Configuration
+echo ""
+echo "🔐 Authentication Setup"
+read -p "Do you want to enable User Authentication and Admin Access? (y/N): " ENABLE_AUTH
+ENABLE_AUTH=${ENABLE_AUTH:-n}
+
+if [[ "$ENABLE_AUTH" =~ ^[Yy]$ ]]; then
+    BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+    BETTER_AUTH_URL=$APP_URL
+    echo "   Better Auth Secret generated."
+else
+    BETTER_AUTH_SECRET=""
+    BETTER_AUTH_URL=""
+fi
+
 # Storage Port Configuration
 echo ""
 echo "📦 Storage Port Configuration (External mappings)"
@@ -107,7 +122,23 @@ COMPOSE_PROJECT_NAME=$APP_SLUG
 APP_NAME=$APP_NAME
 APP_PORT=$APP_PORT
 APP_URL=$APP_URL
+VITE_API_URL=$APP_URL
 ADMIN_TOKEN=$ADMIN_TOKEN
+EOF
+
+if [[ "$ENABLE_AUTH" =~ ^[Yy]$ ]]; then
+    cat <<EOF >> .env
+BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
+BETTER_AUTH_URL=$BETTER_AUTH_URL
+EOF
+else
+    cat <<EOF >> .env
+# BETTER_AUTH_SECRET=
+# BETTER_AUTH_URL=
+EOF
+fi
+
+cat <<EOF >> .env
 GARAGE_S3_PORT=$GARAGE_S3_PORT
 GARAGE_RPC_PORT=$GARAGE_RPC_PORT
 EOF

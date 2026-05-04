@@ -7,15 +7,56 @@ import upload from './routes/upload.js';
 import imagesRoute from './routes/images.js';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { readFile } from 'node:fs/promises';
+import { auth } from './lib/auth.js';
+import { authMiddleware, adminMiddleware } from './lib/middleware.js';
+import { db } from './db/client.js';
+import * as schema from './db/schema.js';
 
-const app = new Hono();
+const app = new Hono<{
+  Variables: {
+    user: typeof auth.$Infer.Session.user;
+    session: typeof auth.$Infer.Session.session;
+  };
+}>();
 
 app.use('*', logger());
-app.use('*', cors());
+app.use('*', cors({
+  origin: [config.appUrl, 'http://localhost:5173'], // Allow local dev and production
+  allowHeaders: ['Content-Type', 'Authorization'],
+  allowMethods: ['POST', 'GET', 'OPTIONS'],
+  credentials: true,
+}));
 
-// API routes first
-app.route('/api/upload', upload);
+app.get("/api/auth/can-register", async (c) => {
+  return c.json({ canRegister: true });
+});
+
+app.get("/api/auth/registration-status", async (c) => {
+  const [user] = await db.select({ id: schema.user.id }).from(schema.user).limit(1);
+  return c.json({ isFirstUser: !user });
+});
+
+// Better Auth handler
+app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// Public API routes
 app.route('/api/images', imagesRoute);
+
+// Protected API routes
+app.route('/api/upload', upload); // Keep upload protected if desired, or move to authMiddleware
+
+app.get('/api/me', authMiddleware, (c) => {
+  const user = c.get('user');
+  return c.json(user);
+});
+
+app.get('/api/admin/status', authMiddleware, adminMiddleware, (c) => {
+  return c.json({ 
+    status: 'ok', 
+    message: 'Welcome to the admin area',
+    user: c.get('user')
+  });
+});
 
 // Serve raw storage objects
 app.get('/raw/*', async (c) => {
