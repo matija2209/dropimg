@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { auth } from "./auth.js";
+import { config } from "../config.js";
 
 export const authMiddleware = createMiddleware(async (c, next) => {
   const session = await auth.api.getSession({
@@ -7,6 +8,9 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   });
 
   if (!session) {
+    if (config.publicMode) {
+      return await next();
+    }
     return c.json({ error: "Unauthorized" }, 401);
   }
 

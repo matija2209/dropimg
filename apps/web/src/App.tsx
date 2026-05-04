@@ -9,6 +9,7 @@ import { Admin } from './components/Admin';
 import { useSession, signOut } from './lib/auth-client';
 
 const APP_NAME = import.meta.env.VITE_APP_NAME || 'DropImg';
+const PUBLIC_MODE = import.meta.env.VITE_PUBLIC_MODE === 'true';
 
 function App() {
   const [isDark, setIsDark] = useState(() => {
@@ -66,7 +67,7 @@ function App() {
                >
                  <LogOut size={20} />
                </button>
-             ) : (
+             ) : !PUBLIC_MODE ? (
                <Link 
                  to="/login"
                  className="p-2 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm"
@@ -74,7 +75,7 @@ function App() {
                >
                  <LogIn size={20} />
                </Link>
-             )}
+             ) : null}
           </div>
           
           <Link to="/" className="inline-block">

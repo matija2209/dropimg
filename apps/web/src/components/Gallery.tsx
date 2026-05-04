@@ -6,13 +6,15 @@ import { useSession } from '../lib/auth-client';
 
 import { NoSession } from './NoSession';
 
+const PUBLIC_MODE = import.meta.env.VITE_PUBLIC_MODE === 'true';
+
 export const Gallery: React.FC = () => {
   const { data: session, isPending: isSessionLoading } = useSession();
   const [images, setImages] = useState<ImageAsset[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session && !PUBLIC_MODE) return;
     
     let isCancelled = false;
 
@@ -49,7 +51,7 @@ export const Gallery: React.FC = () => {
     );
   }
 
-  if (!session) {
+  if (!session && !PUBLIC_MODE) {
     return (
       <NoSession 
         icon={Lock}

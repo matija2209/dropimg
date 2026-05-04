@@ -73,14 +73,16 @@ fi
 # Auth Configuration
 echo ""
 echo "🔐 Authentication Setup"
-read -p "Do you want to enable User Authentication and Admin Access? (y/N): " ENABLE_AUTH
-ENABLE_AUTH=${ENABLE_AUTH:-n}
+read -p "Do you want to enable User Authentication and Admin Access? (Y/n): " ENABLE_AUTH
+ENABLE_AUTH=${ENABLE_AUTH:-y}
 
 if [[ "$ENABLE_AUTH" =~ ^[Yy]$ ]]; then
+    PUBLIC_MODE=false
     BETTER_AUTH_SECRET=$(openssl rand -base64 32)
     BETTER_AUTH_URL=$APP_URL
     echo "   Better Auth Secret generated."
 else
+    PUBLIC_MODE=true
     BETTER_AUTH_SECRET=""
     BETTER_AUTH_URL=""
 fi
@@ -124,6 +126,8 @@ APP_PORT=$APP_PORT
 APP_URL=$APP_URL
 VITE_API_URL=$APP_URL
 ADMIN_TOKEN=$ADMIN_TOKEN
+PUBLIC_MODE=$PUBLIC_MODE
+VITE_PUBLIC_MODE=$PUBLIC_MODE
 EOF
 
 if [[ "$ENABLE_AUTH" =~ ^[Yy]$ ]]; then

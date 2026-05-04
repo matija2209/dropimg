@@ -14,6 +14,7 @@ export const config = {
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '20', 10),
   allowedTypes: (process.env.ALLOWED_TYPES || 'image/png,image/jpeg,image/webp,image/gif').split(','),
   publicUploads: process.env.PUBLIC_UPLOADS === 'true',
+  publicMode: process.env.PUBLIC_MODE === 'true',
   adminToken: process.env.ADMIN_TOKEN || 'change-me',
   auth: {
     secret: process.env.BETTER_AUTH_SECRET || 'a-very-secret-key-at-least-32-chars-long',

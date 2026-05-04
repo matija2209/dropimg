@@ -49,12 +49,19 @@ cd dropimg
 
 ### What the script does:
 1. **Docker Check:** Automatically installs Docker and Docker Compose if they aren't found.
-2. **Interactive Configuration:** Prompts you for App Name, Port, Public URL, Admin Token, and optional Cloudflare Tunnel.
-3. **Storage Provisioning:** Initializes **Garage S3**, creates the `dropimg` bucket, and generates access keys.
-4. **Environment Setup:** Creates a `.env` file with all your settings.
-5. **Launch:** Starts all containers in the background.
+2. **Interactive Configuration:** Prompts you for App Name, Port, Public URL, and Admin Token.
+3. **Authentication Choice:** You can choose between a private setup (User Auth + Admin Access) or a Public Mode (No mandatory login).
+4. **Storage Provisioning:** Initializes **Garage S3**, creates the `dropimg` bucket, and generates access keys.
+5. **Environment Setup:** Creates a `.env` file with all your settings.
+6. **Launch:** Starts all containers in the background.
 
 Once finished, your app will be live at the URL you configured!
+
+### Public Mode (No Authentication)
+During installation, you can choose to disable authentication. In **Public Mode**:
+- Anyone can upload images without an account.
+- The gallery is shared and shows all images uploaded anonymously.
+- Administrative tasks (like deletion) can still be performed using the `ADMIN_TOKEN`.
 
 ### Uninstallation
 To remove the application and stop all services:
@@ -133,9 +140,9 @@ export default buildConfig({
 
 ---
 
-## Authentication & User Roles
+## Authentication & User Roles (Optional)
 
-DropImg uses **Better Auth** for secure, session-based authentication.
+DropImg uses **Better Auth** for secure, session-based authentication. This can be enabled or disabled during installation.
 
 ### **How it Works (Bootstrapping)**
 DropImg is designed for "zero-touch" configuration:
@@ -212,6 +219,8 @@ Environment variables can be managed in `docker-compose.yml` or a `.env` file.
 | `APP_URL` | Full URL of the application | `http://localhost:12312` |
 | `STORAGE_DRIVER` | `local` or `s3` | `s3` |
 | `MAX_UPLOAD_MB` | Max file size in megabytes | `20` |
+| `PUBLIC_MODE` | If `true`, disables mandatory authentication (Backend) | `false` |
+| `VITE_PUBLIC_MODE` | If `true`, hides auth UI elements (Frontend) | `false` |
 | `ADMIN_TOKEN` | Token for administrative tasks | `change-me` |
 
 ---

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { db } from '../db/client.js';
 import { imageVariants, images } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { storage, config } from '../config.js';
 import { serializeImageAsset } from '../lib/image-assets.js';
 import { authMiddleware } from '../lib/middleware.js';
@@ -10,8 +10,8 @@ import type { auth } from '../lib/auth.js';
 
 const imagesRoute = new Hono<{
   Variables: {
-    user: typeof auth.$Infer.Session.user;
-    session: typeof auth.$Infer.Session.session;
+    user?: typeof auth.$Infer.Session.user;
+    session?: typeof auth.$Infer.Session.session;
   };
 }>();
 
@@ -159,7 +159,11 @@ imagesRoute.get('/', authMiddleware, async (c) => {
   const user = c.get('user');
   
   const allImages = await db.query.images.findMany({
-    where: user.role === 'admin' ? undefined : eq(images.userId, user.id),
+    where: !user 
+      ? isNull(images.userId)
+      : user.role === 'admin' 
+        ? undefined 
+        : eq(images.userId, user.id),
     orderBy: (images, { desc }) => [desc(images.createdAt)],
     with: {
       variants: true,
@@ -207,8 +211,8 @@ imagesRoute.delete('/:id', authMiddleware, async (c) => {
   // 1. Correct delete token is provided (stateless)
   // 2. User is the owner
   // 3. User is an admin
-  const isOwner = image.userId === user.id;
-  const isAdmin = user.role === 'admin';
+  const isOwner = user && image.userId === user.id;
+  const isAdmin = user && user.role === 'admin';
   const hasToken = token === image.deleteToken || token === config.adminToken;
 
   if (!hasToken && !isOwner && !isAdmin) {

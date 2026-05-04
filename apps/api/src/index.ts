@@ -14,8 +14,8 @@ import * as schema from './db/schema.js';
 
 const app = new Hono<{
   Variables: {
-    user: typeof auth.$Infer.Session.user;
-    session: typeof auth.$Infer.Session.session;
+    user?: typeof auth.$Infer.Session.user;
+    session?: typeof auth.$Infer.Session.session;
   };
 }>();
 

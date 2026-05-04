@@ -14,8 +14,8 @@ import type { auth } from '../lib/auth.js';
 
 const upload = new Hono<{
   Variables: {
-    user: typeof auth.$Infer.Session.user;
-    session: typeof auth.$Infer.Session.session;
+    user?: typeof auth.$Infer.Session.user;
+    session?: typeof auth.$Infer.Session.session;
   };
 }>();
 
@@ -88,7 +88,7 @@ upload.post('/', async (c) => {
         height: processed.original.height,
         isAnimated: processed.isAnimated,
         deleteToken,
-        userId: user.id,
+        userId: user?.id || null,
         createdAt: new Date(),
       }).run();
 
@@ -125,7 +125,7 @@ upload.post('/', async (c) => {
       height: processed.original.height,
       isAnimated: processed.isAnimated,
       deleteToken,
-      userId: user.id,
+      userId: user?.id || null,
       createdAt: new Date(),
       variants: processed.variants.map((variant) => ({
         imageId: id,
