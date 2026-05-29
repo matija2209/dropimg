@@ -21,6 +21,16 @@ const upload = new Hono<{
 
 upload.use('*', authMiddleware);
 
+upload.get('/settings', (c) => {
+  return c.json({
+    videoUploadsEnabled: config.videoUploadsEnabled,
+    videoTranscodeEnabled: config.videoTranscodeEnabled,
+    maxVideoUploadMb: config.maxVideoUploadMb,
+    chunkSizeBytes: config.chunkSizeBytes,
+    chunkedApiBase: '/api/upload/chunked',
+  });
+});
+
 upload.post('/', async (c) => {
   const user = c.get('user');
   const body = await c.req.parseBody();
@@ -43,6 +53,16 @@ upload.post('/', async (c) => {
 
   if (!file) {
     return c.json({ error: 'No file uploaded' }, 400);
+  }
+
+  if (file.type.startsWith('video/')) {
+    return c.json(
+      {
+        error:
+          'Videos must use the chunked upload endpoint. Select a video file in the uploader (video mode).',
+      },
+      400
+    );
   }
 
   if (!config.allowedTypes.includes(file.type)) {
@@ -90,6 +110,7 @@ upload.post('/', async (c) => {
         filename: processed.original.storageKey,
         altName: altName || null,
         mimeType: processed.original.mimeType,
+        mediaType: 'image',
         size: processed.original.size,
         width: processed.original.width,
         height: processed.original.height,
@@ -127,6 +148,10 @@ upload.post('/', async (c) => {
       filename: processed.original.storageKey,
       altName: altName || null,
       mimeType: processed.original.mimeType,
+      mediaType: 'image',
+      durationMs: null,
+      transcoded: false,
+      originalSize: null,
       size: processed.original.size,
       width: processed.original.width,
       height: processed.original.height,

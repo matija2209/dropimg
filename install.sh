@@ -113,6 +113,32 @@ else
     PHOTOROOM_OUTPUT_FORMAT=""
 fi
 
+# Video upload configuration
+echo ""
+echo "🎬 Video Upload Setup"
+read -p "Enable video uploads with chunked transfer? (Y/n): " ENABLE_VIDEO
+ENABLE_VIDEO=${ENABLE_VIDEO:-y}
+
+if [[ "$ENABLE_VIDEO" =~ ^[Yy]$ ]]; then
+    VIDEO_UPLOADS_ENABLED=true
+    read -p "Max video upload size in MB [500]: " MAX_VIDEO_UPLOAD_MB
+    MAX_VIDEO_UPLOAD_MB=${MAX_VIDEO_UPLOAD_MB:-500}
+    read -p "Enable FFmpeg H.264 optimize on upload? (y/N): " ENABLE_VIDEO_TRANSCODE
+    if [[ "$ENABLE_VIDEO_TRANSCODE" =~ ^[Yy]$ ]]; then
+        VIDEO_TRANSCODE_ENABLED=true
+        echo "   FFmpeg optimize enabled (requires ffmpeg in the container image)."
+    else
+        VIDEO_TRANSCODE_ENABLED=false
+    fi
+    INTERNAL_UPLOAD_SECRET=$(openssl rand -hex 32)
+    echo "   Generated internal upload secret for uploader ↔ API callbacks."
+else
+    VIDEO_UPLOADS_ENABLED=false
+    MAX_VIDEO_UPLOAD_MB=500
+    VIDEO_TRANSCODE_ENABLED=false
+    INTERNAL_UPLOAD_SECRET=""
+fi
+
 # Storage Port Configuration
 echo ""
 echo "📦 Storage Port Configuration (External mappings)"
@@ -183,6 +209,15 @@ EOF
 fi
 
 cat <<EOF >> .env
+VIDEO_UPLOADS_ENABLED=$VIDEO_UPLOADS_ENABLED
+MAX_VIDEO_UPLOAD_MB=$MAX_VIDEO_UPLOAD_MB
+VIDEO_TRANSCODE_ENABLED=$VIDEO_TRANSCODE_ENABLED
+INTERNAL_UPLOAD_SECRET=$INTERNAL_UPLOAD_SECRET
+API_INTERNAL_URL=http://dropimg:3000
+STORAGE_DRIVER=s3
+EOF
+
+cat <<EOF >> .env
 GARAGE_S3_PORT=$GARAGE_S3_PORT
 GARAGE_RPC_PORT=$GARAGE_RPC_PORT
 EOF
@@ -237,9 +272,9 @@ echo ""
 echo "🚀 Starting application..."
 if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then
     echo "   (Including Cloudflare Tunnel)"
-    docker compose --profile tunnel up -d
+    docker compose --profile tunnel up -d dropimg uploader
 else
-    docker compose up -d dropimg
+    docker compose up -d dropimg uploader
 fi
 
 echo ""
@@ -254,6 +289,12 @@ if [[ "$ENABLE_BACKGROUND_REMOVAL" =~ ^[Yy]$ ]]; then
     echo "🪄 Background Removal: Enabled (Photoroom)"
 else
     echo "🪄 Background Removal: Skipped"
+fi
+if [[ "$VIDEO_UPLOADS_ENABLED" == "true" ]]; then
+    echo "🎬 Video Uploads: Enabled (max ${MAX_VIDEO_UPLOAD_MB} MB, transcode=${VIDEO_TRANSCODE_ENABLED})"
+    echo "   Chunked uploads route through the uploader service on port 8080 (proxy via app port or nginx profile)."
+else
+    echo "🎬 Video Uploads: Disabled"
 fi
 echo ""
 if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then

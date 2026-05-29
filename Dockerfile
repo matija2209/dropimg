@@ -1,6 +1,6 @@
 FROM node:24
 
-RUN apt-get update && apt-get install -y python3 make g++ libimage-exiftool-perl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3 make g++ libimage-exiftool-perl ffmpeg && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

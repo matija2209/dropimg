@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { ExternalLink, Calendar, HardDrive, Copy, Check, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { formatDimensions, formatSize, getDisplayName, getPreviewUrl, type ImageAsset } from '../lib/images';
+import {
+  formatDimensions,
+  formatDuration,
+  formatSize,
+  getDisplayName,
+  getPreviewUrl,
+  isVideoAsset,
+  type ImageAsset,
+} from '../lib/images';
 import { useSession } from '../lib/auth-client';
 
 import { NoSession } from './NoSession';
@@ -83,11 +91,22 @@ export const Gallery: React.FC = () => {
           {images.map((image) => (
             <div key={image.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col group">
               <div className="aspect-video bg-gray-50 dark:bg-gray-900 relative overflow-hidden">
-                <img 
-                  src={getPreviewUrl(image)} 
-                  alt={getDisplayName(image)} 
-                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                />
+                {isVideoAsset(image) ? (
+                  <video
+                    src={image.directUrl}
+                    poster={image.variants.poster?.url}
+                    className="w-full h-full object-cover"
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : (
+                  <img
+                    src={getPreviewUrl(image)}
+                    alt={getDisplayName(image)}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  />
+                )}
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                   <Link 
                     to={`/i/${image.id}`}
@@ -119,7 +138,11 @@ export const Gallery: React.FC = () => {
                     {getDisplayName(image)}
                   </p>
                   <p className="text-xs text-gray-400 truncate mb-2">
-                    {image.isAnimated ? 'Animated original only' : 'Original + web variants'}
+                    {isVideoAsset(image)
+                      ? 'Video'
+                      : image.isAnimated
+                        ? 'Animated original only'
+                        : 'Original + web variants'}
                   </p>
                 </Link>
                 
@@ -135,6 +158,11 @@ export const Gallery: React.FC = () => {
                   {formatDimensions(image.width, image.height) && (
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       {formatDimensions(image.width, image.height)}
+                    </div>
+                  )}
+                  {formatDuration(image.durationMs) && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Duration {formatDuration(image.durationMs)}
                     </div>
                   )}
                 </div>

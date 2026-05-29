@@ -1,33 +1,36 @@
 import { config } from '../config.js';
 import type { Image, ImageVariant } from '../db/schema.js';
 import type { VariantName } from '../services/image-processing.js';
+import type { VideoVariantName } from '../services/video-processing.js';
+
+export type AssetVariantName = VariantName | VideoVariantName;
 
 type ImageWithVariants = Image & {
   variants?: ImageVariant[];
 };
 
-export function buildVariantUrl(imageId: string, variant: VariantName): string {
+export function buildVariantUrl(imageId: string, variant: AssetVariantName): string {
   return `${config.publicBaseUrl}/api/images/${imageId}/file/${variant}`;
 }
 
-export function buildBase64Url(imageId: string, variant: VariantName): string {
+export function buildBase64Url(imageId: string, variant: AssetVariantName): string {
   return `${config.publicBaseUrl}/api/images/${imageId}/base64/${variant}`;
 }
 
 export function serializeImageAsset(image: ImageWithVariants) {
+  const isVideo = image.mediaType === 'video';
+
   const variantData = (image.variants ?? []).map((variant) => ({
-    name: variant.variant as VariantName,
-    url: buildVariantUrl(image.id, variant.variant as VariantName),
-    base64Url: buildBase64Url(image.id, variant.variant as VariantName),
+    name: variant.variant as AssetVariantName,
+    url: buildVariantUrl(image.id, variant.variant as AssetVariantName),
+    base64Url: buildBase64Url(image.id, variant.variant as AssetVariantName),
     mimeType: variant.mimeType,
     width: variant.width,
     height: variant.height,
     size: variant.size,
   }));
 
-  const variants = Object.fromEntries(
-    variantData.map((v) => [v.name, v])
-  );
+  const variants = Object.fromEntries(variantData.map((v) => [v.name, v]));
 
   const original = {
     url: buildVariantUrl(image.id, 'original'),
@@ -38,25 +41,39 @@ export function serializeImageAsset(image: ImageWithVariants) {
     size: image.size,
   };
 
-  // Generate responsive HTML snippet
+  const posterUrl = variants.poster?.url;
   const srcsetEntries = variantData
-    .filter(v => v.width)
+    .filter((v) => v.width && v.name !== 'poster')
     .sort((a, b) => (a.width || 0) - (b.width || 0))
-    .map(v => `${v.url} ${v.width}w`);
+    .map((v) => `${v.url} ${v.width}w`);
 
-  let responsiveHtml = `<img src="${original.url}" alt="${image.altName || ''}" />`;
-  if (srcsetEntries.length > 0) {
-    const srcset = srcsetEntries.join(', ');
-    const sizes = `(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 1024px`;
-    responsiveHtml = `<img src="${original.url}" srcset="${srcset}" sizes="${sizes}" alt="${image.altName || ''}" loading="lazy" />`;
+  let responsiveHtml: string;
+  let videoHtml: string | undefined;
+
+  if (isVideo) {
+    const posterAttr = posterUrl ? ` poster="${posterUrl}"` : '';
+    videoHtml = `<video src="${original.url}" controls preload="metadata"${posterAttr}></video>`;
+    responsiveHtml = videoHtml;
+  } else {
+    responsiveHtml = `<img src="${original.url}" alt="${image.altName || ''}" />`;
+    if (srcsetEntries.length > 0) {
+      const srcset = srcsetEntries.join(', ');
+      const sizes = `(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 1024px`;
+      responsiveHtml = `<img src="${original.url}" srcset="${srcset}" sizes="${sizes}" alt="${image.altName || ''}" loading="lazy" />`;
+    }
   }
 
   return {
     ...image,
+    mediaType: image.mediaType ?? 'image',
+    durationMs: image.durationMs ?? null,
+    transcoded: image.transcoded ?? false,
+    originalSize: image.originalSize ?? null,
     directUrl: original.url,
     autoUrl: `${config.publicBaseUrl}/api/images/${image.id}/auto`,
     original,
     variants,
     responsiveHtml,
+    videoHtml,
   };
 }

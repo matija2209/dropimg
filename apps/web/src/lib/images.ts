@@ -1,5 +1,6 @@
-export type VariantName = 'thumbnail' | 'card' | 'tablet' | 'social';
-export type UploadMode = 'upload' | 'compress-jpg' | 'png-to-jpg' | 'strip-metadata' | 'remove-background';
+export type VariantName = 'thumbnail' | 'card' | 'tablet' | 'social' | 'poster';
+export type UploadMode = 'upload' | 'compress-jpg' | 'png-to-jpg' | 'strip-metadata' | 'remove-background' | 'video';
+export type MediaType = 'image' | 'video';
 
 export interface ImageRendition {
   url: string;
@@ -15,37 +16,53 @@ export interface ImageAsset {
   filename: string;
   altName: string | null;
   mimeType: string;
+  mediaType?: MediaType;
   size: number;
   width: number | null;
   height: number | null;
+  durationMs?: number | null;
+  transcoded?: boolean;
+  originalSize?: number | null;
   isAnimated: boolean;
   createdAt: string;
   directUrl: string;
   autoUrl: string;
   responsiveHtml: string;
+  videoHtml?: string;
   original: ImageRendition;
   variants: Partial<Record<VariantName, ImageRendition>>;
 }
 
 export interface ProcessingSummary {
-  mode: UploadMode;
+  mode: UploadMode | 'video';
   sourceMimeType: string;
   sourceSize: number;
   outputMimeType: string;
   outputSize: number;
   savedBytes: number;
   savedPercent: number;
+  transcoded?: boolean;
+}
+
+export function isVideoAsset(image: Pick<ImageAsset, 'mediaType' | 'mimeType'>): boolean {
+  return image.mediaType === 'video' || image.mimeType.startsWith('video/');
 }
 
 export function getDisplayName(image: Pick<ImageAsset, 'altName' | 'id'>): string {
   return image.altName || image.id;
 }
 
-export function getPreviewUrl(image: Pick<ImageAsset, 'directUrl' | 'variants'>): string {
+export function getPreviewUrl(image: Pick<ImageAsset, 'directUrl' | 'variants' | 'mediaType' | 'mimeType'>): string {
+  if (isVideoAsset(image)) {
+    return image.variants.poster?.url || image.directUrl;
+  }
   return image.variants.card?.url || image.variants.thumbnail?.url || image.directUrl;
 }
 
-export function getPrimaryViewUrl(image: Pick<ImageAsset, 'directUrl' | 'variants'>): string {
+export function getPrimaryViewUrl(image: Pick<ImageAsset, 'directUrl' | 'variants' | 'mediaType' | 'mimeType'>): string {
+  if (isVideoAsset(image)) {
+    return image.directUrl;
+  }
   return image.variants.tablet?.url || getPreviewUrl(image);
 }
 
@@ -67,6 +84,17 @@ export function formatDimensions(width: number | null, height: number | null): s
   }
 
   return `${width} x ${height}`;
+}
+
+export function formatDuration(durationMs: number | null | undefined): string | null {
+  if (!durationMs || durationMs <= 0) {
+    return null;
+  }
+
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function formatMimeLabel(mimeType: string): string {

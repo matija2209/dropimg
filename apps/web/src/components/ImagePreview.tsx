@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Copy, Check, ExternalLink, Calendar, HardDrive, ArrowLeft } from 'lucide-react';
-import { formatDimensions, formatSize, getBase64ApiPath, getDisplayName, getPrimaryViewUrl, type ImageAsset } from '../lib/images';
+import {
+  formatDimensions,
+  formatDuration,
+  formatSize,
+  getBase64ApiPath,
+  getDisplayName,
+  getPrimaryViewUrl,
+  isVideoAsset,
+  type ImageAsset,
+} from '../lib/images';
 
 type RenditionEntry = {
   key: string;
@@ -70,6 +79,7 @@ export const ImagePreview: React.FC = () => {
         { key: 'card', label: 'Card', rendition: image.variants.card },
         { key: 'tablet', label: 'Tablet', rendition: image.variants.tablet },
         { key: 'social', label: 'Social', rendition: image.variants.social },
+        { key: 'poster', label: 'Poster', rendition: image.variants.poster },
       ].reduce<RenditionEntry[]>((entries, entry) => {
         if (entry.rendition) {
           entries.push({
@@ -123,7 +133,9 @@ export const ImagePreview: React.FC = () => {
                     <span className="flex items-center gap-1.5"><HardDrive size={14} /> {formatSize(image.size)}</span>
                     <span className="uppercase">{image.mimeType.split('/')[1]}</span>
                     {formatDimensions(image.width, image.height) && <span>{formatDimensions(image.width, image.height)}</span>}
+                    {formatDuration(image.durationMs) && <span>{formatDuration(image.durationMs)}</span>}
                     {image.isAnimated && <span>Animated</span>}
+                    {image.transcoded && <span>Transcoded</span>}
                   </div>
                 </div>
                 <a
@@ -241,14 +253,16 @@ export const ImagePreview: React.FC = () => {
                           <ExternalLink size={16} />
                           Open rendition
                         </a>
-                        <button
-                          onClick={() => copyBase64ToClipboard(entry.key)}
-                          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                          disabled={copying !== null}
-                        >
-                          {copied === `${entry.key}-base64` ? <Check size={16} /> : <Copy size={16} />}
-                          {copying === `${entry.key}-base64` ? 'Preparing base64...' : 'Copy base64'}
-                        </button>
+                        {!isVideoAsset(image) && (
+                          <button
+                            onClick={() => copyBase64ToClipboard(entry.key)}
+                            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                            disabled={copying !== null}
+                          >
+                            {copied === `${entry.key}-base64` ? <Check size={16} /> : <Copy size={16} />}
+                            {copying === `${entry.key}-base64` ? 'Preparing base64...' : 'Copy base64'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -259,11 +273,20 @@ export const ImagePreview: React.FC = () => {
 
           <div className="bg-gray-50 dark:bg-gray-900/50 p-6 flex items-center justify-center lg:col-span-7 lg:min-h-[42rem]">
             <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-950/80">
-              <img
-                src={getPrimaryViewUrl(image)}
-                alt={getDisplayName(image)}
-                className="max-h-[70vh] w-full object-contain rounded"
-              />
+              {isVideoAsset(image) ? (
+                <video
+                  src={image.directUrl}
+                  poster={image.variants.poster?.url}
+                  controls
+                  className="max-h-[70vh] w-full rounded"
+                />
+              ) : (
+                <img
+                  src={getPrimaryViewUrl(image)}
+                  alt={getDisplayName(image)}
+                  className="max-h-[70vh] w-full object-contain rounded"
+                />
+              )}
             </div>
           </div>
         </div>

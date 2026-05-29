@@ -5,7 +5,8 @@ import { eq, isNull } from 'drizzle-orm';
 import { storage, config } from '../config.js';
 import { serializeImageAsset } from '../lib/image-assets.js';
 import { authMiddleware } from '../lib/middleware.js';
-import type { VariantName } from '../services/image-processing.js';
+import type { AssetVariantName } from '../lib/image-assets.js';
+import { serveRangedFile } from '../lib/range-response.js';
 import type { auth } from '../lib/auth.js';
 
 const imagesRoute = new Hono<{
@@ -25,6 +26,10 @@ imagesRoute.get('/:id/base64/:variant', async (c) => {
 
   if (!image) {
     return c.json({ error: 'Image not found' }, 404);
+  }
+
+  if (image.mediaType === 'video') {
+    return c.json({ error: 'Base64 is not available for video assets' }, 400);
   }
 
   const resolved = resolveVariant(image, c.req.param('variant'));
@@ -66,6 +71,14 @@ imagesRoute.get('/:id/file/:variant', async (c) => {
   }
 
   try {
+    if (image.mediaType === 'video' && resolved.variant === 'original') {
+      return serveRangedFile(c, {
+        storageKey: resolved.storageKey,
+        mimeType: resolved.mimeType || image.mimeType,
+        fileSize: image.size,
+      });
+    }
+
     const { body, mimeType } = await storage.get(resolved.storageKey);
 
     return c.body(body, 200, {
@@ -119,7 +132,7 @@ imagesRoute.get('/:id/auto', async (c) => {
   const targetWidth = viewportWidth > 0 ? viewportWidth * dpr : 0;
 
   let resolved = {
-    variant: 'original' as VariantName,
+    variant: 'original' as AssetVariantName,
     storageKey: image.filename,
     mimeType: image.mimeType,
   };
@@ -134,7 +147,7 @@ imagesRoute.get('/:id/auto', async (c) => {
     
     if (bestVariant) {
       resolved = {
-        variant: bestVariant.variant as VariantName,
+        variant: bestVariant.variant as AssetVariantName,
         storageKey: bestVariant.storageKey,
         mimeType: bestVariant.mimeType,
       };
@@ -142,11 +155,19 @@ imagesRoute.get('/:id/auto', async (c) => {
   }
 
   try {
+    if (image.mediaType === 'video') {
+      return serveRangedFile(c, {
+        storageKey: resolved.storageKey,
+        mimeType: resolved.mimeType || image.mimeType,
+        fileSize: image.size,
+      });
+    }
+
     const { body, mimeType } = await storage.get(resolved.storageKey);
 
     return c.body(body, 200, {
       'Content-Type': mimeType || resolved.mimeType || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=3600', // Shorter cache for auto-serving
+      'Cache-Control': 'public, max-age=3600',
       'Vary': 'Sec-CH-Viewport-Width, Sec-CH-DPR',
     });
   } catch (error) {
@@ -232,25 +253,25 @@ imagesRoute.delete('/:id', authMiddleware, async (c) => {
 });
 
 function resolveVariant(
-  image: any,
+  image: { filename: string; mimeType: string; variants: Array<{ variant: string; storageKey: string; mimeType: string }> },
   requestedVariant: string
 ) {
   if (requestedVariant === 'original') {
     return {
-      variant: 'original' as VariantName,
+      variant: 'original' as AssetVariantName,
       storageKey: image.filename,
       mimeType: image.mimeType,
     };
   }
 
-  const variant = image.variants.find((entry: any) => entry.variant === requestedVariant);
+  const variant = image.variants.find((entry) => entry.variant === requestedVariant);
 
   if (!variant) {
     return null;
   }
 
   return {
-    variant: variant.variant as VariantName,
+    variant: variant.variant as AssetVariantName,
     storageKey: variant.storageKey,
     mimeType: variant.mimeType,
   };

@@ -1,5 +1,10 @@
-import React, { useRef, useState } from 'react';
-import { Check, Copy, Image as ImageIcon, SlidersHorizontal, Trash2, Type, Upload } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, Copy, Film, Image as ImageIcon, SlidersHorizontal, Trash2, Type, Upload } from 'lucide-react';
+import { isVideoFile } from '../lib/file-mime';
+import {
+  type ChunkUploadTelemetry,
+  uploadVideoChunked,
+} from '../lib/uploads/chunked-uploader';
 import { Link } from 'react-router-dom';
 import { useSession } from '../lib/auth-client';
 import {
@@ -85,6 +90,21 @@ const MODE_CONFIG: Record<UploadMode, ModeConfig> = {
     accept: 'image/png,image/jpeg,image/webp',
     acceptedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
   },
+  video: {
+    label: 'Video',
+    title: 'Drop video here',
+    description: 'Upload any video format via resumable chunked transfer.',
+    helper: 'MP4, MOV, WEBM, MKV, and more. Large files use 8 MB chunks.',
+    accept: 'video/*',
+    acceptedMimeTypes: [],
+  },
+};
+
+type UploadSettings = {
+  videoUploadsEnabled: boolean;
+  videoTranscodeEnabled: boolean;
+  maxVideoUploadMb: number;
+  chunkedApiBase: string;
 };
 
 import { NoSession } from './NoSession';
@@ -101,7 +121,23 @@ export const Uploader: React.FC = () => {
   const [compressQuality, setCompressQuality] = useState(82);
   const [pngToJpgQuality, setPngToJpgQuality] = useState(90);
   const [error, setError] = useState<string | null>(null);
+  const [uploadSettings, setUploadSettings] = useState<UploadSettings | null>(null);
+  const [videoTranscode, setVideoTranscode] = useState(false);
+  const [chunkProgress, setChunkProgress] = useState<ChunkUploadTelemetry | null>(null);
+  const [uploadPhase, setUploadPhase] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void fetch('/api/upload/settings', { credentials: 'include' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data) {
+          setUploadSettings(data as UploadSettings);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   if (isSessionLoading) {
     return (
@@ -139,7 +175,13 @@ export const Uploader: React.FC = () => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.type.startsWith('image/')) {
+    if (!droppedFile) return;
+    if (isVideoFile(droppedFile)) {
+      setMode('video');
+      uploadFile(droppedFile, 'video');
+      return;
+    }
+    if (droppedFile.type.startsWith('image/')) {
       uploadFile(droppedFile);
     }
   };
@@ -164,8 +206,15 @@ export const Uploader: React.FC = () => {
     e.target.value = '';
   };
 
-  const uploadFile = async (fileToUpload: File) => {
-    const validationError = validateFileForMode(fileToUpload, mode);
+  const uploadFile = async (fileToUpload: File, forcedMode?: UploadMode) => {
+    const activeUploadMode = forcedMode ?? mode;
+
+    if (activeUploadMode === 'video' || isVideoFile(fileToUpload)) {
+      await uploadVideoFile(fileToUpload);
+      return;
+    }
+
+    const validationError = validateFileForMode(fileToUpload, activeUploadMode);
 
     if (validationError) {
       setError(validationError);
@@ -177,7 +226,7 @@ export const Uploader: React.FC = () => {
     const formData = new FormData();
     formData.append('file', fileToUpload);
     formData.append('altName', altName);
-    formData.append('mode', mode);
+    formData.append('mode', activeUploadMode);
 
     if (currentQuality !== undefined) {
       formData.append('quality', String(currentQuality));
@@ -187,6 +236,7 @@ export const Uploader: React.FC = () => {
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -201,6 +251,56 @@ export const Uploader: React.FC = () => {
       setError(uploadError instanceof Error ? uploadError.message : 'Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const uploadVideoFile = async (fileToUpload: File) => {
+    if (!uploadSettings?.videoUploadsEnabled) {
+      setError('Video uploads are disabled on this server.');
+      return;
+    }
+
+    if (!isVideoFile(fileToUpload)) {
+      setError('Only video files are supported in video mode.');
+      return;
+    }
+
+    const maxBytes = uploadSettings.maxVideoUploadMb * 1024 * 1024;
+    if (fileToUpload.size > maxBytes) {
+      setError(`File exceeds the ${uploadSettings.maxVideoUploadMb} MB video limit.`);
+      return;
+    }
+
+    setError(null);
+    setIsUploading(true);
+    setChunkProgress(null);
+    setUploadPhase('Uploading chunks…');
+    abortRef.current = new AbortController();
+
+    try {
+      const data = (await uploadVideoChunked(
+        fileToUpload,
+        uploadSettings.chunkedApiBase,
+        {
+          altName: altName || undefined,
+          transcode: videoTranscode && uploadSettings.videoTranscodeEnabled,
+        },
+        {
+          onProgress: (telemetry) => setChunkProgress(telemetry),
+          onFinalizing: () => setUploadPhase('Processing video…'),
+        },
+        abortRef.current.signal,
+      )) as unknown as UploadResponse;
+
+      setResult(data);
+    } catch (uploadError) {
+      console.error('Error uploading video:', uploadError);
+      setError(uploadError instanceof Error ? uploadError.message : 'Video upload failed.');
+    } finally {
+      setIsUploading(false);
+      setChunkProgress(null);
+      setUploadPhase(null);
+      abortRef.current = null;
     }
   };
 
@@ -332,6 +432,7 @@ export const Uploader: React.FC = () => {
                 </div>
               </div>
 
+              {result.mediaType !== 'video' && !result.mimeType.startsWith('video/') && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Base64</label>
                 <div className="flex gap-2">
@@ -353,6 +454,7 @@ export const Uploader: React.FC = () => {
                   </button>
                 </div>
               </div>
+              )}
 
               <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex gap-4 items-center">
@@ -384,11 +486,20 @@ export const Uploader: React.FC = () => {
 
           <div className="flex items-center justify-center bg-gray-50 p-6 dark:bg-gray-900/50 lg:col-span-7 lg:min-h-[42rem]">
             <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-950/80">
-              <img
-                src={getPreviewUrl(result)}
-                alt={getDisplayName(result)}
-                className="max-h-[70vh] w-full object-contain"
-              />
+              {result.mediaType === 'video' || result.mimeType.startsWith('video/') ? (
+                <video
+                  src={result.directUrl}
+                  poster={result.variants.poster?.url}
+                  controls
+                  className="max-h-[70vh] w-full"
+                />
+              ) : (
+                <img
+                  src={getPreviewUrl(result)}
+                  alt={getDisplayName(result)}
+                  className="max-h-[70vh] w-full object-contain"
+                />
+              )}
             </div>
           </div>
         </div>
@@ -400,7 +511,9 @@ export const Uploader: React.FC = () => {
     <div className="w-full max-w-6xl flex flex-col gap-4">
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(MODE_CONFIG) as UploadMode[]).map((entryMode) => (
+          {(Object.keys(MODE_CONFIG) as UploadMode[])
+            .filter((entryMode) => entryMode !== 'video' || uploadSettings?.videoUploadsEnabled !== false)
+            .map((entryMode) => (
             <button
               key={entryMode}
               type="button"
@@ -439,6 +552,18 @@ export const Uploader: React.FC = () => {
               className="flex-1 bg-transparent border-none focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400"
             />
           </div>
+
+          {mode === 'video' && uploadSettings?.videoTranscodeEnabled && (
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 md:min-w-72">
+              <input
+                type="checkbox"
+                checked={videoTranscode}
+                onChange={(e) => setVideoTranscode(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Optimize for web (H.264 MP4)
+            </label>
+          )}
 
           {activeMode.quality && currentQuality !== undefined && (
             <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/60 md:min-w-72">
@@ -495,14 +620,30 @@ export const Uploader: React.FC = () => {
         <div className="mb-4 p-4 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-full">
           {isUploading ? (
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-current"></div>
+          ) : mode === 'video' ? (
+            <Film size={32} />
           ) : (
             <Upload size={32} />
           )}
         </div>
 
         <h2 className="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-100">
-          {isUploading ? 'Uploading...' : activeMode.title}
+          {isUploading ? uploadPhase || 'Uploading...' : activeMode.title}
         </h2>
+        {isUploading && chunkProgress && (
+          <div className="mb-4 w-full max-w-md">
+            <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+              <div
+                className="h-full bg-blue-600 transition-all"
+                style={{ width: `${chunkProgress.progressPercent}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              {formatSize(chunkProgress.uploadedBytes)} / {formatSize(chunkProgress.fileSize)}
+              {chunkProgress.etaSeconds !== null ? ` · ~${chunkProgress.etaSeconds}s remaining` : ''}
+            </p>
+          </div>
+        )}
         <p className="text-gray-500 dark:text-gray-400">{activeMode.description}</p>
         <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
           Click to browse or paste from clipboard. {activeMode.helper}
@@ -535,8 +676,12 @@ export const Uploader: React.FC = () => {
 };
 
 function validateFileForMode(file: File, mode: UploadMode): string | null {
+  if (mode === 'video') {
+    return isVideoFile(file) ? null : 'Video mode only accepts video files.';
+  }
+
   if (!file.type.startsWith('image/')) {
-    return 'Only image uploads are supported.';
+    return 'Only image uploads are supported in this mode.';
   }
 
   const config = MODE_CONFIG[mode];
@@ -561,6 +706,10 @@ function validateFileForMode(file: File, mode: UploadMode): string | null {
 }
 
 function getProcessingHeadline(processing: ProcessingSummary): string {
+  if (processing.mode === 'video') {
+    return processing.transcoded ? 'Video optimized and hosted' : 'Video hosted';
+  }
+
   if (processing.mode === 'strip-metadata') {
     return 'Stripped all metadata (including C2PA)';
   }

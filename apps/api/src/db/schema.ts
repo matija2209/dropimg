@@ -60,9 +60,13 @@ export const images = sqliteTable('images', {
   filename: text('filename').notNull(),
   altName: text('alt_name'),
   mimeType: text('mime_type').notNull(),
+  mediaType: text('media_type').notNull().default('image'),
   size: integer('size').notNull(),
   width: integer('width'),
   height: integer('height'),
+  durationMs: integer('duration_ms'),
+  transcoded: integer('transcoded', { mode: 'boolean' }).notNull().default(false),
+  originalSize: integer('original_size'),
   isAnimated: integer('is_animated', { mode: 'boolean' }).notNull().default(false),
   deleteToken: text('delete_token').notNull(),
   userId: text('user_id')

@@ -5,11 +5,15 @@ import { logger } from 'hono/logger';
 import { config, storage } from './config.js';
 import upload from './routes/upload.js';
 import imagesRoute from './routes/images.js';
+import internalMediaFinalized from './routes/internal-media-finalized.js';
+import { serveRangedFile } from './lib/range-response.js';
+import { db } from './db/client.js';
+import { images } from './db/schema.js';
+import { eq } from 'drizzle-orm';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { readFile } from 'node:fs/promises';
 import { auth } from './lib/auth.js';
 import { authMiddleware, adminMiddleware } from './lib/middleware.js';
-import { db } from './db/client.js';
 import * as schema from './db/schema.js';
 
 const app = new Hono<{
@@ -22,7 +26,7 @@ const app = new Hono<{
 app.use('*', logger());
 app.use('*', cors({
   origin: [config.appUrl, 'http://localhost:5173'], // Allow local dev and production
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', 'Range'],
   allowMethods: ['POST', 'GET', 'OPTIONS'],
   credentials: true,
 }));
@@ -43,7 +47,10 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 app.route('/api/images', imagesRoute);
 
 // Protected API routes
-app.route('/api/upload', upload); // Keep upload protected if desired, or move to authMiddleware
+app.route('/api/upload', upload);
+
+// Internal callback from uploader service (block at nginx in production)
+app.route('/api/internal/media-finalized', internalMediaFinalized);
 
 app.get('/api/me', authMiddleware, (c) => {
   const user = c.get('user');
@@ -63,10 +70,27 @@ app.get('/raw/*', async (c) => {
   const filename = decodeURIComponent(c.req.path.replace(/^\/raw\//, ''));
 
   try {
-    const { body, mimeType } = await storage.get(filename);
+    const image = await db.query.images.findFirst({
+      where: eq(images.filename, filename),
+    });
+
+    const mimeType =
+      image?.mimeType ||
+      (filename.endsWith('.mp4') ? 'video/mp4' : undefined) ||
+      'application/octet-stream';
+
+    if (image?.mediaType === 'video' || mimeType.startsWith('video/')) {
+      return serveRangedFile(c, {
+        storageKey: filename,
+        mimeType,
+        fileSize: image?.size,
+      });
+    }
+
+    const { body, mimeType: storedMime } = await storage.get(filename);
 
     return c.body(body, 200, {
-      'Content-Type': mimeType || 'application/octet-stream',
+      'Content-Type': storedMime || mimeType,
       'Cache-Control': 'public, max-age=31536000, immutable',
     });
   } catch (err) {
