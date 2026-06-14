@@ -51,6 +51,7 @@ export async function finalizeDropimgVideoUpload(
         isAnimated: false,
         deleteToken,
         userId,
+        source: 'upload',
         createdAt: new Date(),
       }).run();
 
@@ -91,6 +92,7 @@ export async function finalizeDropimgVideoUpload(
     isAnimated: false,
     deleteToken,
     userId,
+    source: 'upload',
     createdAt: new Date(),
     variants: processed.variants.map((variant) => ({
       imageId: id,

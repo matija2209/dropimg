@@ -69,6 +69,7 @@ export const images = sqliteTable('images', {
   originalSize: integer('original_size'),
   isAnimated: integer('is_animated', { mode: 'boolean' }).notNull().default(false),
   deleteToken: text('delete_token').notNull(),
+  source: text('source').notNull().default('upload'),
   userId: text('user_id')
     .references(() => user.id, { onDelete: 'set null' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),

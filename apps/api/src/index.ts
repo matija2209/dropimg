@@ -6,6 +6,7 @@ import { config, storage } from './config.js';
 import upload from './routes/upload.js';
 import imagesRoute from './routes/images.js';
 import internalMediaFinalized from './routes/internal-media-finalized.js';
+import serviceImageUpload from './routes/service-image-upload.js';
 import { serveRangedFile } from './lib/range-response.js';
 import { db } from './db/client.js';
 import { images } from './db/schema.js';
@@ -51,6 +52,9 @@ app.route('/api/upload', upload);
 
 // Internal callback from uploader service (block at nginx in production)
 app.route('/api/internal/media-finalized', internalMediaFinalized);
+
+// Trusted service image upload (public, bearer auth)
+app.route('/api/service/image-upload', serviceImageUpload);
 
 app.get('/api/me', authMiddleware, (c) => {
   const user = c.get('user');

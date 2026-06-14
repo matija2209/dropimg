@@ -117,6 +117,7 @@ upload.post('/', async (c) => {
         isAnimated: processed.isAnimated,
         deleteToken,
         userId: user?.id || null,
+        source: 'upload',
         createdAt: new Date(),
       }).run();
 
@@ -158,6 +159,7 @@ upload.post('/', async (c) => {
       isAnimated: processed.isAnimated,
       deleteToken,
       userId: user?.id || null,
+      source: 'upload',
       createdAt: new Date(),
       variants: processed.variants.map((variant) => ({
         imageId: id,
