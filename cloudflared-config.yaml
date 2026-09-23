@@ -1,7 +1,9 @@
+# DEPRECATED — use ~/proxy-server (whcp-dev-proxy) + DNS A record instead.
+# See dropimg/scripts/migrate-dropimg-off-tunnel.sh
 tunnel: 9e396975-99a6-4af3-9e4a-e4aff1bb50f8
 credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
   - hostname: img.buildwithmatija.com
-    service: http://dropimg:3000
+    service: http_status:404
   - service: http_status:404

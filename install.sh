@@ -150,9 +150,11 @@ SUGGESTED_ADMIN_PORT=$(find_available_port 3903)
 read -p "External Garage Admin Port [$SUGGESTED_ADMIN_PORT]: " GARAGE_RPC_PORT
 GARAGE_RPC_PORT=${GARAGE_RPC_PORT:-$SUGGESTED_ADMIN_PORT}
 
-# Cloudflare Tunnel Option
+# Public ingress: ~/proxy-server (recommended). Tunnel is legacy.
 echo ""
-read -p "Do you want to enable Cloudflare Tunnel? (y/N): " ENABLE_TUNNEL
+echo "🌐 Public access uses ~/proxy-server on this VPS (not Cloudflare Tunnel)."
+echo "   Point DNS A record for your domain to this server's public IP."
+read -p "Enable legacy Cloudflare Tunnel anyway? (y/N): " ENABLE_TUNNEL
 ENABLE_TUNNEL=${ENABLE_TUNNEL:-n}
 
 # 3. Setup Garage (S3 Backend) Config
@@ -271,10 +273,10 @@ EOF
 echo ""
 echo "🚀 Starting application..."
 if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then
-    echo "   (Including Cloudflare Tunnel)"
-    docker compose --profile tunnel up -d dropimg uploader
+    echo "   (Including Cloudflare Tunnel — not recommended for video uploads)"
+    docker compose --profile tunnel up -d
 else
-    docker compose up -d dropimg uploader
+    docker compose up -d
 fi
 
 echo ""
@@ -298,8 +300,11 @@ else
 fi
 echo ""
 if [[ "$ENABLE_TUNNEL" =~ ^[Yy]$ ]]; then
-    echo "☁️  Cloudflare Tunnel is enabled."
-    echo "   Ensure your credentials.json and cloudflared-config.yaml are correctly set."
+    echo "☁️  Cloudflare Tunnel is enabled (legacy)."
+    echo "   Prefer: DNS → ~/proxy-server → host port ${APP_PORT}"
+else
+    echo "🌐 Expose DropImg on host port ${APP_PORT} (dropimg-nginx)."
+    echo "   Add vhost in ~/proxy-server and run: ./scripts/migrate-dropimg-off-tunnel.sh"
 fi
 echo ""
 echo "To view logs: docker compose logs -f dropimg"
