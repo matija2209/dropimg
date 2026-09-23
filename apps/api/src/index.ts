@@ -7,6 +7,7 @@ import upload from './routes/upload.js';
 import imagesRoute from './routes/images.js';
 import internalMediaFinalized from './routes/internal-media-finalized.js';
 import serviceImageUpload from './routes/service-image-upload.js';
+import mcpRoute from './mcp/routes.js';
 import { serveRangedFile } from './lib/range-response.js';
 import { db } from './db/client.js';
 import { images } from './db/schema.js';
@@ -55,6 +56,9 @@ app.route('/api/internal/media-finalized', internalMediaFinalized);
 
 // Trusted service image upload (public, bearer auth)
 app.route('/api/service/image-upload', serviceImageUpload);
+
+// Model Context Protocol (MCP) server
+app.route('/api/mcp', mcpRoute);
 
 app.get('/api/me', authMiddleware, (c) => {
   const user = c.get('user');

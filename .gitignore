@@ -12,3 +12,4 @@ apps/api/dist
 *.json
 .agents/
 .claude/
+typescript-sdk/

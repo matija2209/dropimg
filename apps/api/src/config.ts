@@ -22,6 +22,7 @@ export const config = {
   publicUploads: process.env.PUBLIC_UPLOADS === 'true',
   publicMode: process.env.PUBLIC_MODE === 'true',
   adminToken: process.env.ADMIN_TOKEN || 'change-me',
+  mcpApiKey: process.env.MCP_API_KEY || '',
   auth: {
     secret: process.env.BETTER_AUTH_SECRET || 'a-very-secret-key-at-least-32-chars-long',
     url: process.env.BETTER_AUTH_URL || 'http://localhost:3000',

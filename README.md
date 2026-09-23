@@ -100,6 +100,7 @@ To update DropImg to the latest version while preserving your data:
 - **S3-Compatible Storage:** Built-in integration with [Garage](https://garagehq.deuxfleurs.fr/).
 - **SQLite + Drizzle:** Zero-config metadata storage with automatic migrations and ownership tracking.
 - **Proxied Serving:** Clean URLs (`/raw/:id`) and private S3 bucket support. Direct URLs remain public for easy sharing.
+- **Model Context Protocol (MCP) Server:** Native MCP support for Claude Desktop, Cursor, and remote AI tools to upload, retrieve, list, and embed images. See [MCP Documentation](docs/mcp.md).
 
 ---
 

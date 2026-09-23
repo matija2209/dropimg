@@ -13,4 +13,10 @@ sqlite.pragma('foreign_keys = ON');
 export const db = drizzle(sqlite, { schema });
 
 // Automatically run migrations - point to the 'drizzle' folder at the app/api level
-migrate(db, { migrationsFolder: join(__dirname, '../../drizzle') });
+try {
+  migrate(db, { migrationsFolder: join(__dirname, '../../drizzle') });
+} catch (err: any) {
+  if (!err?.message?.includes('already exists') && !err?.cause?.message?.includes('already exists')) {
+    throw err;
+  }
+}
