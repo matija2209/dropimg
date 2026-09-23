@@ -1,14 +1,20 @@
 import { Hono } from 'hono';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { buildDropImgServer } from './server.js';
+import { resolveMcpIdentity, type ResolvedMcpIdentity } from '../lib/mcp-auth.js';
 import { config } from '../config.js';
 
-const mcpRoute = new Hono();
-const handler = createMcpHandler(buildDropImgServer);
+const mcpRoute = new Hono<{
+  Variables: {
+    mcpIdentity?: ResolvedMcpIdentity;
+  };
+}>();
 
-function verifyMcpAuth(c: any): boolean {
-  if (config.publicMode) {
-    return true;
+const handler = createMcpHandler((ctx) => buildDropImgServer(ctx));
+
+mcpRoute.use('*', async (c, next) => {
+  if (c.req.method === 'OPTIONS') {
+    return new Response(null, { status: 204 });
   }
 
   const authHeader = c.req.header('Authorization') || '';
@@ -16,42 +22,33 @@ function verifyMcpAuth(c: any): boolean {
   const queryToken = c.req.query('token') || '';
   const token = bearerToken || queryToken;
 
-  if (!token) {
-    return false;
-  }
+  const identity = await resolveMcpIdentity(token, c.req.raw.headers);
 
-  if (config.mcpApiKey && token === config.mcpApiKey) {
-    return true;
-  }
-
-  if (config.adminToken && token === config.adminToken) {
-    return true;
-  }
-
-  if (config.internalUploadSecret && token === config.internalUploadSecret) {
-    return true;
-  }
-
-  return false;
-}
-
-mcpRoute.use('*', async (c, next) => {
-  if (c.req.method === 'OPTIONS') {
-    return new Response(null, { status: 204 });
-  }
-
-  if (!verifyMcpAuth(c)) {
+  if (!identity && !config.publicMode) {
     return c.json(
-      { error: 'Unauthorized: Valid Bearer token or token query parameter required.' },
+      { error: 'Unauthorized: Valid User API Key, Better Auth Bearer token, or Master token required.' },
       401
     );
+  }
+
+  if (identity) {
+    c.set('mcpIdentity', identity);
   }
 
   await next();
 });
 
 mcpRoute.all('*', async (c) => {
-  return handler.fetch(c.req.raw);
+  const identity = c.get('mcpIdentity');
+  const authInfo = identity
+    ? {
+        token: 'mcp-token',
+        clientId: identity.user?.id || 'mcp',
+        scopes: ['mcp'],
+        ...identity,
+      }
+    : undefined;
+  return handler.fetch(c.req.raw, { authInfo });
 });
 
 export default mcpRoute;

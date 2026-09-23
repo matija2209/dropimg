@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "../db/client.js";
 import * as schema from "../db/schema.js";
-import { admin } from "better-auth/plugins";
+import { admin, bearer } from "better-auth/plugins";
 import { config } from "../config.js";
 import { count } from "drizzle-orm";
 
@@ -41,7 +41,8 @@ export const auth = betterAuth({
         }
     },
     plugins: [
-        admin()
+        admin(),
+        bearer()
     ],
     advanced: {
         useSecureCookies: true,

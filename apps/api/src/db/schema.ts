@@ -102,6 +102,26 @@ export const imageVariantsRelations = relations(imageVariants, ({ one }) => ({
   }),
 }));
 
+export const apiKeys = sqliteTable('api_keys', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  keyHash: text('key_hash').notNull().unique(),
+  keyPrefix: text('key_prefix').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  lastUsedAt: integer('last_used_at', { mode: 'timestamp' }),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }),
+});
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  user: one(user, {
+    fields: [apiKeys.userId],
+    references: [user.id],
+  }),
+}));
+
 export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferSelect;
 export type ImageVariant = typeof imageVariants.$inferSelect;
@@ -110,3 +130,6 @@ export type User = typeof user.$inferSelect;
 export type Session = typeof session.$inferSelect;
 export type Account = typeof account.$inferSelect;
 export type Verification = typeof verification.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
+

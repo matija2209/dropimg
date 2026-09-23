@@ -1,7 +1,7 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, isNull } from 'drizzle-orm';
 import sharp from 'sharp';
 
 import { db } from '../db/client.js';
@@ -14,6 +14,7 @@ import {
   type UploadMode,
   ImageProcessingError,
 } from '../services/image-processing.js';
+import type { ResolvedMcpIdentity } from '../lib/mcp-auth.js';
 
 export async function readBodyToBuffer(body: unknown): Promise<Buffer> {
   if (Buffer.isBuffer(body)) {
@@ -56,7 +57,19 @@ function resolveVariantKey(
   };
 }
 
-export function buildDropImgServer(): McpServer {
+export type McpServerContext = {
+  authInfo?: ResolvedMcpIdentity;
+  user?: {
+    id: string;
+    role?: string;
+  };
+  isAdmin?: boolean;
+};
+
+export function buildDropImgServer(context?: McpServerContext | any): McpServer {
+  const callerUser = context?.authInfo?.user || context?.user;
+  const isAdmin = Boolean(context?.authInfo?.isAdmin || context?.isAdmin || callerUser?.role === 'admin');
+
   const server = new McpServer(
     { name: 'dropimg', version: '1.0.0' },
     {
@@ -66,7 +79,7 @@ export function buildDropImgServer(): McpServer {
         prompts: {},
       },
       instructions:
-        'DropImg MCP Server: Host, process, optimize, retrieve, and delete images with automatic responsive variants and markdown generation.',
+        'DropImg MCP Server: Host, process, optimize, retrieve, and delete images with automatic responsive variants, private gallery isolation, and markdown generation.',
     }
   );
 
@@ -232,8 +245,8 @@ export function buildDropImgServer(): McpServer {
             height: processed.original.height,
             isAnimated: processed.isAnimated,
             deleteToken,
-            userId: null,
-            source: 'mcp',
+            userId: callerUser?.id || null,
+            source: callerUser ? 'mcp-user' : 'mcp',
             createdAt: new Date(),
           }).run();
 
@@ -266,8 +279,8 @@ export function buildDropImgServer(): McpServer {
           height: processed.original.height,
           isAnimated: processed.isAnimated,
           deleteToken,
-          userId: null,
-          source: 'mcp',
+          userId: callerUser?.id || null,
+          source: callerUser ? 'mcp-user' : 'mcp',
           createdAt: new Date(),
           variants: processed.variants.map((v) => ({
             imageId: id,
@@ -297,13 +310,14 @@ export function buildDropImgServer(): McpServer {
           deleteToken,
           variants: serialized.variants,
           processing: processed.processing,
+          userId: callerUser?.id || null,
         };
 
         return {
           content: [
             {
               type: 'text',
-              text: `Image successfully uploaded and hosted on DropImg!\n\n- **ID**: \`${id}\`\n- **Direct URL**: ${rawUrl}\n- **Page View**: ${pageUrl}\n- **Markdown**: \`${markdown}\`\n- **Dimensions**: ${processed.original.width}x${processed.original.height} (${processed.original.mimeType})\n- **Delete Token**: \`${deleteToken}\``,
+              text: `Image successfully uploaded and hosted on DropImg!\n\n- **ID**: \`${id}\`\n- **Direct URL**: ${rawUrl}\n- **Page View**: ${pageUrl}\n- **Markdown**: \`${markdown}\`\n- **Dimensions**: ${processed.original.width}x${processed.original.height} (${processed.original.mimeType})\n- **Delete Token**: \`${deleteToken}\`${callerUser ? `\n- **Owner**: \`${callerUser.id}\` (Private Gallery)` : ''}`,
             },
           ],
           structuredContent: resultPayload,
@@ -341,25 +355,32 @@ export function buildDropImgServer(): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ id, variant = 'original', includeImageData = false }): Promise<CallToolResult> => {
-      const image = await db.query.images.findFirst({
+      let image = await db.query.images.findFirst({
         where: eq(images.id, id),
         with: { variants: true },
       });
 
       if (!image) {
-        // Fallback: check by filename
-        const imageByFilename = await db.query.images.findFirst({
+        image = await db.query.images.findFirst({
           where: eq(images.filename, id),
           with: { variants: true },
         });
+      }
 
-        if (!imageByFilename) {
-          return {
-            isError: true,
-            content: [{ type: 'text', text: `Image not found: ${id}` }],
-          };
-        }
-        return await handleGetImage(imageByFilename, variant, includeImageData);
+      if (!image) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `Image not found: ${id}` }],
+        };
+      }
+
+      // Check privacy: If owned by someone else and caller is not admin
+      const isOwner = callerUser && callerUser.id === image.userId;
+      if (image.userId && !isOwner && !isAdmin) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `Image not found: ${id}` }],
+        };
       }
 
       return await handleGetImage(image, variant, includeImageData);
@@ -371,7 +392,7 @@ export function buildDropImgServer(): McpServer {
     'list_images',
     {
       title: 'List Images',
-      description: 'Lists recently uploaded images on DropImg with pagination, dimensions, and URLs.',
+      description: 'Lists images on DropImg with pagination, dimensions, and URLs. Scoped to the authenticated user.',
       inputSchema: z.object({
         limit: z.number().int().min(1).max(100).optional().default(20).describe('Maximum number of images to return.'),
         offset: z.number().int().min(0).optional().default(0).describe('Pagination offset.'),
@@ -379,7 +400,18 @@ export function buildDropImgServer(): McpServer {
       annotations: { readOnlyHint: true },
     },
     async ({ limit = 20, offset = 0 }): Promise<CallToolResult> => {
+      // Privacy scoping:
+      // - Admins/Master see all
+      // - Authenticated users see ONLY their own images
+      // - Anonymous/Public see ONLY images without owner
+      const whereClause = isAdmin
+        ? undefined
+        : callerUser
+          ? eq(images.userId, callerUser.id)
+          : isNull(images.userId);
+
       const rows = await db.query.images.findMany({
+        where: whereClause,
         limit,
         offset,
         orderBy: [desc(images.createdAt)],
@@ -397,6 +429,7 @@ export function buildDropImgServer(): McpServer {
           width: img.width,
           height: img.height,
           createdAt: img.createdAt,
+          userId: img.userId,
           url: `${config.publicBaseUrl}/raw/${img.filename}`,
           pageUrl: `${config.appUrl}/i/${img.id}`,
           thumbnailUrl: serialized.variants?.thumbnail?.url,
@@ -410,14 +443,17 @@ export function buildDropImgServer(): McpServer {
         )
         .join('\n');
 
+      const scopeDesc = isAdmin ? 'All Images' : callerUser ? `Private Gallery (${callerUser.id})` : 'Public/Anonymous Images';
+
       return {
         content: [
           {
             type: 'text',
-            text: items.length > 0 ? `Found ${items.length} images (offset ${offset}):\n\n${markdownList}` : 'No images found.',
+            text: items.length > 0 ? `Found ${items.length} images [${scopeDesc}] (offset ${offset}):\n\n${markdownList}` : `No images found [${scopeDesc}].`,
           },
         ],
         structuredContent: {
+          scope: scopeDesc,
           count: items.length,
           offset,
           limit,
@@ -438,7 +474,7 @@ export function buildDropImgServer(): McpServer {
         deleteToken: z
           .string()
           .optional()
-          .describe('The delete token issued when the image was uploaded (or admin token).'),
+          .describe('The delete token issued when the image was uploaded (not needed if you are the owner or admin).'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -455,13 +491,17 @@ export function buildDropImgServer(): McpServer {
         };
       }
 
-      const isValidToken =
-        deleteToken && (deleteToken === image.deleteToken || deleteToken === config.adminToken);
+      // Permission check:
+      // 1. Authenticated user is the owner
+      // 2. Authenticated user is an admin
+      // 3. Valid delete token provided
+      const isOwner = callerUser && image.userId === callerUser.id;
+      const hasToken = deleteToken && (deleteToken === image.deleteToken || deleteToken === config.adminToken);
 
-      if (!isValidToken) {
+      if (!isOwner && !isAdmin && !hasToken) {
         return {
           isError: true,
-          content: [{ type: 'text', text: 'Unauthorized: Valid deleteToken or admin token required to delete image.' }],
+          content: [{ type: 'text', text: 'Unauthorized: You do not have permission to delete this image.' }],
         };
       }
 
@@ -494,6 +534,11 @@ export function buildDropImgServer(): McpServer {
       });
 
       if (!image) {
+        throw new Error(`Image not found: ${id}`);
+      }
+
+      const isOwner = callerUser && callerUser.id === image.userId;
+      if (image.userId && !isOwner && !isAdmin) {
         throw new Error(`Image not found: ${id}`);
       }
 

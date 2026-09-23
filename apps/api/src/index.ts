@@ -8,6 +8,7 @@ import imagesRoute from './routes/images.js';
 import internalMediaFinalized from './routes/internal-media-finalized.js';
 import serviceImageUpload from './routes/service-image-upload.js';
 import mcpRoute from './mcp/routes.js';
+import apiKeysRoute from './routes/api-keys.js';
 import { serveRangedFile } from './lib/range-response.js';
 import { db } from './db/client.js';
 import { images } from './db/schema.js';
@@ -59,6 +60,9 @@ app.route('/api/service/image-upload', serviceImageUpload);
 
 // Model Context Protocol (MCP) server
 app.route('/api/mcp', mcpRoute);
+
+// User API Keys for MCP and programmatic access
+app.route('/api/user/api-keys', apiKeysRoute);
 
 app.get('/api/me', authMiddleware, (c) => {
   const user = c.get('user');

@@ -3,12 +3,15 @@ import test from 'node:test';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import sharp from 'sharp';
+import { eq } from 'drizzle-orm';
 
 import { buildDropImgServer } from './server.js';
 import { db } from '../db/client.js';
-import { images, imageVariants } from '../db/schema.js';
+import { images, imageVariants, user as userTable, apiKeys } from '../db/schema.js';
 import { config, storage } from '../config.js';
 import mcpRoute from './routes.js';
+import apiKeysRoute from '../routes/api-keys.js';
+import { generateApiKey, hashApiKey, resolveMcpIdentity } from '../lib/mcp-auth.js';
 import { Hono } from 'hono';
 
 test('MCP Server: tools, resources, and end-to-end image lifecycle', async () => {
@@ -133,6 +136,146 @@ test('MCP Server: tools, resources, and end-to-end image lifecycle', async () =>
 
   await client.close();
   await server.close();
+});
+
+test('MCP Server: Private User Accounts & Gallery Isolation', async () => {
+  const aliceId = `alice_${Date.now()}`;
+  const bobId = `bob_${Date.now()}`;
+
+  // Seed two test users
+  db.insert(userTable)
+    .values([
+      {
+        id: aliceId,
+        name: 'Alice',
+        email: `${aliceId}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        role: 'user',
+      },
+      {
+        id: bobId,
+        name: 'Bob',
+        email: `${bobId}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        role: 'user',
+      },
+    ])
+    .run();
+
+  // 1. Connect Alice's scoped MCP server
+  const aliceServer = buildDropImgServer({ user: { id: aliceId, role: 'user' } });
+  const aliceClient = new Client({ name: 'alice-client', version: '1.0.0' });
+  const [aClientTransport, aServerTransport] = InMemoryTransport.createLinkedPair();
+  await aliceServer.connect(aServerTransport);
+  await aliceClient.connect(aClientTransport);
+
+  // Generate test image
+  const imgBuf = await sharp({
+    create: { width: 20, height: 20, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } },
+  })
+    .png()
+    .toBuffer();
+
+  // Alice uploads an image
+  const aliceUpload = await aliceClient.callTool({
+    name: 'upload_image',
+    arguments: {
+      imageData: imgBuf.toString('base64'),
+      altName: 'Alice Secret Asset',
+    },
+  });
+  assert.ok(!aliceUpload.isError);
+  const aliceImgId = (aliceUpload.structuredContent as any).id;
+
+  // Verify DB record has Alice's userId
+  const dbRecord = await db.query.images.findFirst({ where: eq(images.id, aliceImgId) });
+  assert.equal(dbRecord?.userId, aliceId, 'Uploaded image must be tied to Alice userId');
+
+  // Alice lists images -> should see her image
+  const aliceList = await aliceClient.callTool({ name: 'list_images', arguments: {} });
+  const aliceImages = (aliceList.structuredContent as any).images;
+  assert.ok(aliceImages.some((i: any) => i.id === aliceImgId), 'Alice must see her own image');
+
+  // 2. Connect Bob's scoped MCP server
+  const bobServer = buildDropImgServer({ user: { id: bobId, role: 'user' } });
+  const bobClient = new Client({ name: 'bob-client', version: '1.0.0' });
+  const [bClientTransport, bServerTransport] = InMemoryTransport.createLinkedPair();
+  await bobServer.connect(bServerTransport);
+  await bobClient.connect(bClientTransport);
+
+  // Bob lists images -> must NOT see Alice's image!
+  const bobList = await bobClient.callTool({ name: 'list_images', arguments: {} });
+  const bobImages = (bobList.structuredContent as any).images;
+  assert.equal(
+    bobImages.some((i: any) => i.id === aliceImgId),
+    false,
+    'Bob must NOT see Alice private image in gallery'
+  );
+
+  // Bob tries to get Alice's image -> rejected/not found
+  const bobGet = await bobClient.callTool({ name: 'get_image', arguments: { id: aliceImgId } });
+  assert.equal(bobGet.isError, true, 'Bob should not be able to fetch Alice private image metadata');
+
+  // Bob tries to delete Alice's image -> rejected
+  const bobDelete = await bobClient.callTool({ name: 'delete_image', arguments: { id: aliceImgId } });
+  assert.equal(bobDelete.isError, true, 'Bob should not be able to delete Alice image');
+
+  // 3. Alice deletes her own image -> should succeed without deleteToken!
+  const aliceDelete = await aliceClient.callTool({ name: 'delete_image', arguments: { id: aliceImgId } });
+  assert.ok(!aliceDelete.isError, 'Owner (Alice) must be able to delete without deleteToken');
+
+  await aliceClient.close();
+  await aliceServer.close();
+  await bobClient.close();
+  await bobServer.close();
+});
+
+test('MCP Auth: Personal API Keys generation and resolution', async () => {
+  const testUserId = `user_keys_${Date.now()}`;
+  db.insert(userTable)
+    .values({
+      id: testUserId,
+      name: 'Key Tester',
+      email: `${testUserId}@example.com`,
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      role: 'user',
+    })
+    .run();
+
+  const { key, keyHash, keyPrefix } = generateApiKey();
+  const keyId = `key_${Date.now()}`;
+
+  db.insert(apiKeys)
+    .values({
+      id: keyId,
+      userId: testUserId,
+      name: 'Cursor MCP Key',
+      keyHash,
+      keyPrefix,
+      createdAt: new Date(),
+    })
+    .run();
+
+  // Test token resolution with valid key
+  const identity = await resolveMcpIdentity(key);
+  assert.ok(identity, 'Should resolve identity for valid API key');
+  assert.equal(identity.user?.id, testUserId);
+  assert.equal(identity.isAdmin, false);
+
+  // Test token resolution with invalid key
+  const badIdentity = await resolveMcpIdentity('drop_sec_invalid_token_12345');
+  assert.equal(badIdentity, null, 'Should return null for invalid key');
+
+  // Test master admin token resolution
+  config.adminToken = 'master-test-admin-secret';
+  const adminIdentity = await resolveMcpIdentity('master-test-admin-secret');
+  assert.ok(adminIdentity?.isAdmin);
 });
 
 test('MCP Hono Route: Bearer authentication', async () => {

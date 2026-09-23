@@ -6,16 +6,73 @@ This allows external AI agents and IDEs (Claude Desktop, Cursor, Antigravity IDE
 
 ---
 
+## Private Multi-Tenancy & User Account Isolation
+
+DropImg connects MCP operations directly to your **Better Auth** user account:
+
+- **Private Galleries**: Images uploaded with your personal API key or session token are saved with `userId: user.id`. They immediately appear in your private gallery on the web dashboard.
+- **Private Listing**: `list_images` is scoped to your account. You will only see the images you uploaded.
+- **Direct Ownership Deletion**: Authenticated owners can delete their images directly without needing a separate `deleteToken`.
+- **Master Overrides**: Admins and master tokens (`MCP_API_KEY`, `ADMIN_TOKEN`) can see and manage all images.
+
+---
+
+## Authentication & Personal API Keys
+
+External MCP clients can authenticate using either:
+1. **Personal API Keys (Option A)**: Permanent secret keys (`drop_sec_...`).
+2. **Better Auth Session Tokens (Option B)**: Session tokens passed via Bearer auth.
+3. **Master Server Token**: `MCP_API_KEY` or `ADMIN_TOKEN`.
+
+### Generating a Personal API Key
+
+Users can manage their MCP keys via the REST API (or web dashboard):
+
+#### 1. Create Key
+```bash
+POST /api/user/api-keys
+Authorization: Bearer <session-token>
+Content-Type: application/json
+
+{
+  "name": "Cursor MCP Key",
+  "expiresDays": 365
+}
+```
+**Response (201 Created):**
+```json
+{
+  "id": "key_abc123",
+  "name": "Cursor MCP Key",
+  "key": "drop_sec_abc123xyz...",
+  "keyPrefix": "drop_sec_abc1...xyz",
+  "createdAt": "2026-09-23T10:00:00Z"
+}
+```
+*(The raw key is returned only once upon creation).*
+
+#### 2. List Your Keys
+```bash
+GET /api/user/api-keys
+```
+
+#### 3. Revoke a Key
+```bash
+DELETE /api/user/api-keys/:id
+```
+
+---
+
 ## Capabilities
 
 ### 1. Tools
 
 | Tool | Description | Inputs |
 | :--- | :--- | :--- |
-| `upload_image` | Upload and host an image on DropImg | `imageData` (base64) OR `imageUrl` (web link), `altName`, `mode` (`upload`, `compress-jpg`, `png-to-jpg`, `strip-metadata`, `remove-background`), `quality` (1-100) |
+| `upload_image` | Upload and host an image on DropImg (saved to your private gallery) | `imageData` (base64) OR `imageUrl` (web link), `altName`, `mode` (`upload`, `compress-jpg`, `png-to-jpg`, `strip-metadata`, `remove-background`), `quality` (1-100) |
 | `get_image` | Retrieve metadata, direct URLs, variants, and optional base64 image content | `id`, `variant` (`original`, `thumbnail`, `card`, `tablet`, `social`), `includeImageData` (boolean) |
-| `list_images` | List recent images with pagination | `limit` (default 20, max 100), `offset` (default 0) |
-| `delete_image` | Delete an image and its variants | `id`, `deleteToken` (optional if admin authenticated) |
+| `list_images` | List your private images with pagination | `limit` (default 20, max 100), `offset` (default 0) |
+| `delete_image` | Delete an image and its variants | `id`, `deleteToken` (not required if you are the owner) |
 
 ### 2. Resources
 - `dropimg://images/{id}`: Direct metadata and variant links for an image asset.
@@ -80,18 +137,11 @@ https://img.yourdomain.com/api/mcp
 ```
 
 #### Authentication
-Remote HTTP requests are protected by Bearer token authentication unless `PUBLIC_MODE=true` is set.
 Provide your token via the `Authorization` header:
 ```http
-Authorization: Bearer <MCP_API_KEY or ADMIN_TOKEN or INTERNAL_UPLOAD_SECRET>
+Authorization: Bearer <PERSONAL_API_KEY or SESSION_TOKEN or MCP_API_KEY>
 ```
 Or as a URL query parameter:
 ```
 https://img.yourdomain.com/api/mcp?token=<TOKEN>
 ```
-
-#### Environment Variables
-In your `.env` or `docker-compose.yml`:
-- `MCP_API_KEY`: Dedicated secret key for external MCP clients.
-- `ADMIN_TOKEN`: Also accepted as administrative master token.
-- `INTERNAL_UPLOAD_SECRET`: Also accepted for internal microservice uploads.
