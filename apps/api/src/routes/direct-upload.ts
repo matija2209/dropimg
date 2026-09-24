@@ -55,6 +55,14 @@ directUpload.get('/status', (c) => {
   return c.json(result);
 });
 
+directUpload.get('/', (c) => {
+  return c.json({
+    status: 'ok',
+    endpoint: '/api/upload/direct',
+    usage: 'POST with ?ticket=<signed_ticket> and multipart/form-data field "file"',
+  });
+});
+
 directUpload.post('/', async (c) => {
   // 1. Extract Ticket
   const queryTicket = c.req.query('ticket');
