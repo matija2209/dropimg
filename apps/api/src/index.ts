@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { config, storage } from './config.js';
+import directUpload from './routes/direct-upload.js';
 import upload from './routes/upload.js';
 import imagesRoute from './routes/images.js';
 import internalMediaFinalized from './routes/internal-media-finalized.js';
@@ -100,6 +101,9 @@ app.get('/.well-known/oauth-protected-resource/*', handlePrm);
 
 // Public API routes
 app.route('/api/images', imagesRoute);
+
+// Ticket-based direct upload for MCP sandbox / container environments
+app.route('/api/upload/direct', directUpload);
 
 // Protected API routes
 app.route('/api/upload', upload);

@@ -76,6 +76,13 @@ External AI agents authenticate via standard OAuth 2.0 discovery and authorizati
 - **`delete_image`**:
   - Inputs: `id`, optional `deleteToken` (owners do not need a delete token).
   - Removes the image and all variants from storage and database.
+- **`request_upload_url`** *(Sandbox / Claude Web / Container Direct Upload)*:
+  - Inputs: `filename` (optional string), `altName`, `mode`, `quality`, `expiresInMinutes` (default 15).
+  - Generates a signed, single-use upload ticket and pre-formatted `curl` command.
+  - Allows AI agents in sandboxed environments (e.g. Claude Web bash containers) to upload local files directly without passing massive base64 text through LLM context tokens.
+- **`claim_upload_ticket`**:
+  - Inputs: `ticketId`.
+  - Retrieves hosted URLs, markdown embed code, and variant details for an image uploaded via a direct ticket.
 
 ### Resources & Prompts
 - **Resource `dropimg://images/{id}`**: Direct JSON metadata, variant links, and dimensions.
@@ -86,7 +93,7 @@ External AI agents authenticate via standard OAuth 2.0 discovery and authorizati
 ## 4. Development & Testing Commands
 
 ```bash
-# Run unit & integration test suite (17 tests covering MCP tools, OAuth discovery, image processing)
+# Run unit & integration test suite (19 tests covering MCP tools, direct container upload, OAuth discovery, image processing)
 npm test --workspace=@dropimg/api
 
 # Build all workspaces (TypeScript & Vite)

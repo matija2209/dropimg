@@ -9,6 +9,10 @@ import { images, imageVariants } from '../db/schema.js';
 import { config, storage } from '../config.js';
 import { serializeImageAsset, type AssetVariantName } from '../lib/image-assets.js';
 import {
+  createUploadTicket,
+  getTicketResult,
+} from '../lib/upload-ticket.js';
+import {
   processAndStoreImage,
   uploadModes,
   type UploadMode,
@@ -79,7 +83,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
         prompts: {},
       },
       instructions:
-        'DropImg MCP Server: Host, process, optimize, retrieve, and delete images with automatic responsive variants, private gallery isolation, and markdown generation.',
+        'DropImg MCP Server: Host, process, optimize, retrieve, and delete images with automatic responsive variants, private gallery isolation, and markdown generation. When an image exists in your local container, sandbox, or filesystem, call request_upload_url to generate a signed direct upload URL and upload it with curl instead of generating massive base64 text.',
     }
   );
 
@@ -522,7 +526,147 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     }
   );
 
-  // 5. MCP Resource: dropimg://images/{id}
+  // 5. Tool: request_upload_url (Direct Upload for Claude/Container/Sandbox)
+  server.registerTool(
+    'request_upload_url',
+    {
+      title: 'Request Direct Upload URL',
+      description:
+        'Generates a signed, temporary direct upload URL and curl command to upload an image directly from your local sandbox container or terminal. Use this when you have an image file inside your Claude sandbox, container, or terminal, avoiding large base64 tokens in chat context.',
+      inputSchema: z.object({
+        filename: z
+          .string()
+          .optional()
+          .describe('Optional filename of the image in your local container (e.g. "screenshot.png").'),
+        altName: z
+          .string()
+          .optional()
+          .describe('Optional descriptive title or alt text for the image.'),
+        mode: z
+          .enum(uploadModes)
+          .optional()
+          .default('upload')
+          .describe(
+            "Processing mode: 'upload' (default), 'compress-jpg', 'png-to-jpg', 'strip-metadata', or 'remove-background'."
+          ),
+        quality: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe('Optional compression quality from 1 to 100.'),
+        expiresInMinutes: z
+          .number()
+          .int()
+          .min(1)
+          .max(60)
+          .optional()
+          .default(15)
+          .describe('Ticket expiration duration in minutes (default 15).'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ filename, altName, mode, quality, expiresInMinutes }): Promise<CallToolResult> => {
+      const userId = callerUser?.id || (config.publicMode ? 'anonymous' : null);
+      if (!userId) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'Authentication required: You must be authenticated to request a direct upload URL.',
+            },
+          ],
+        };
+      }
+
+      const { ticket, ticketId, expiresAt } = createUploadTicket({
+        userId,
+        filename,
+        altName,
+        mode: mode as UploadMode,
+        quality,
+        expiresInSeconds: (expiresInMinutes || 15) * 60,
+      });
+
+      const uploadUrl = `${config.publicBaseUrl.replace(/\/$/, '')}/api/upload/direct?ticket=${ticket}`;
+      const targetFile = filename || 'image.png';
+      const curlCommand = `curl -s -X POST -F "file=@${targetFile}" "${uploadUrl}"`;
+
+      const responsePayload = {
+        uploadUrl,
+        ticketId,
+        expiresAt: expiresAt.toISOString(),
+        curlCommand,
+        instructions:
+          'Run the curl command directly in your sandbox/container shell. Once finished, parse the JSON response for directUrl, markdown, and pictureHtml.',
+      };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `Direct Upload URL generated successfully!\n\n` +
+              `- **Ticket ID**: \`${ticketId}\`\n` +
+              `- **Expires At**: ${expiresAt.toISOString()}\n\n` +
+              `**Execute this command in your sandbox/container shell**:\n` +
+              `\`\`\`bash\n${curlCommand}\n\`\`\`\n\n` +
+              `The curl response will return the final image URLs, markdown embed code, and responsive HTML snippets.`,
+          },
+        ],
+        structuredContent: responsePayload,
+      };
+    }
+  );
+
+  // 6. Tool: claim_upload_ticket
+  server.registerTool(
+    'claim_upload_ticket',
+    {
+      title: 'Claim Upload Ticket Result',
+      description:
+        'Retrieves the hosted image URLs, markdown embed code, and metadata for an image uploaded via a direct upload ticket.',
+      inputSchema: z.object({
+        ticketId: z.string().describe('The ticket ID returned by request_upload_url.'),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ ticketId }): Promise<CallToolResult> => {
+      const result = getTicketResult(ticketId);
+      if (!result) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `No upload found for ticket ID "${ticketId}". The file may not have finished uploading yet, or the ticket has expired.`,
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `Image details for ticket \`${ticketId}\`:\n\n` +
+              `- **ID**: \`${result.id}\`\n` +
+              `- **Direct URL**: ${result.rawUrl || result.directUrl}\n` +
+              `- **Page View**: ${result.pageUrl}\n` +
+              `- **Markdown**: \`${result.markdown}\`\n` +
+              `- **Dimensions**: ${result.width}x${result.height} (${result.mimeType})\n` +
+              `- **Delete Token**: \`${result.deleteToken}\``,
+          },
+        ],
+        structuredContent: result,
+      };
+    }
+  );
+
+  // 7. MCP Resource: dropimg://images/{id}
   server.registerResource(
     'image-metadata',
     new ResourceTemplate('dropimg://images/{id}', { list: undefined }),

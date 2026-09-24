@@ -98,12 +98,26 @@ DELETE /api/user/api-keys/:id
 | `get_image` | Retrieve metadata, direct URLs, variants, and optional base64 image content | `id`, `variant` (`original`, `thumbnail`, `card`, `tablet`, `social`), `includeImageData` (boolean) |
 | `list_images` | List your private images with pagination | `limit` (default 20, max 100), `offset` (default 0) |
 | `delete_image` | Delete an image and its variants | `id`, `deleteToken` (not required if you are the owner) |
+| `request_upload_url` | Generate a signed, single-use upload ticket and curl command for direct container/sandbox uploads (Claude Web, code execution sandboxes) | `filename`, `altName`, `mode`, `quality`, `expiresInMinutes` |
+| `claim_upload_ticket` | Retrieve hosted URLs, markdown embed code, and metadata using a ticket ID | `ticketId` |
 
 ### 2. Resources
 - `dropimg://images/{id}`: Direct metadata and variant links for an image asset.
 
 ### 3. Prompts
 - `embed_image`: Generates ready-to-use responsive HTML picture tags and Markdown links for an image.
+
+---
+
+## Direct Sandbox & Container Uploads (Claude Web / Code Execution)
+
+When interacting with Claude Web or environments that generate images inside a sandbox/container (e.g. bash or Python scripts):
+1. **The Issue**: Claude's sandbox container cannot output 500,000+ base64 characters via tool arguments without exceeding token limits or corrupting the file, and the container does not hold your OAuth token to call `/api/upload` directly.
+2. **The Solution**: 
+   - Claude calls `request_upload_url({ filename: "screenshot.png" })` over its existing authenticated MCP connection.
+   - DropImg generates an HMAC-SHA256 signed, single-use ticket URL (`/api/upload/direct?ticket=...`).
+   - Claude executes `curl -s -X POST -F "file=@screenshot.png" "<uploadUrl>"` in its container.
+   - The image is processed, assigned to your private gallery, and returns Markdown and URLs directly to Claude without passing image bytes through the LLM context.
 
 ---
 

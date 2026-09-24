@@ -29,6 +29,8 @@ test('MCP Server: tools, resources, and end-to-end image lifecycle', async () =>
   assert.ok(toolNames.includes('get_image'), 'Should register get_image tool');
   assert.ok(toolNames.includes('list_images'), 'Should register list_images tool');
   assert.ok(toolNames.includes('delete_image'), 'Should register delete_image tool');
+  assert.ok(toolNames.includes('request_upload_url'), 'Should register request_upload_url tool');
+  assert.ok(toolNames.includes('claim_upload_ticket'), 'Should register claim_upload_ticket tool');
 
   // 2. Generate a small test image (30x30 red square)
   const testPngBuffer = await sharp({
