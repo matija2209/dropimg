@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { readFile } from 'node:fs/promises';
 import { auth } from './lib/auth.js';
+import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from 'better-auth/plugins';
 import { authMiddleware, adminMiddleware } from './lib/middleware.js';
 import * as schema from './db/schema.js';
 
@@ -28,9 +29,10 @@ const app = new Hono<{
 
 app.use('*', logger());
 app.use('*', cors({
-  origin: [config.appUrl, 'http://localhost:5173'], // Allow local dev and production
-  allowHeaders: ['Content-Type', 'Authorization', 'Range'],
-  allowMethods: ['POST', 'GET', 'OPTIONS'],
+  origin: (origin) => origin || '*',
+  allowHeaders: ['Content-Type', 'Authorization', 'Range', 'Mcp-Session-Id', 'Mcp-Protocol-Version'],
+  exposeHeaders: ['Mcp-Session-Id', 'WWW-Authenticate', 'Last-Event-Id', 'Mcp-Protocol-Version'],
+  allowMethods: ['POST', 'GET', 'OPTIONS', 'DELETE', 'PUT'],
   credentials: true,
 }));
 
@@ -43,8 +45,58 @@ app.get("/api/auth/registration-status", async (c) => {
   return c.json({ isFirstUser: !user });
 });
 
-// Better Auth handler
+// Better Auth handler and RFC 9207 (SEP-2468) iss parameter middleware for MCP OAuth redirects
+app.use('/api/auth/mcp/authorize', async (c, next) => {
+  await next();
+  const loc = c.res.headers.get('Location');
+  if (c.res.status >= 300 && c.res.status < 400 && loc && !loc.startsWith('/')) {
+    try {
+      const issuer = config.publicBaseUrl.replace(/\/$/, '');
+      const issuerOrigin = new URL(issuer).origin;
+      const u = new URL(loc);
+      if (u.origin !== issuerOrigin && !u.searchParams.has('iss')) {
+        u.searchParams.set('iss', issuer);
+        c.res.headers.set('Location', u.href);
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }
+});
+
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// RFC 8414 OAuth 2.0 Authorization Server Metadata & OpenID Connect Discovery
+const discoveryHandler = oAuthDiscoveryMetadata(auth);
+const prmHandler = oAuthProtectedResourceMetadata(auth);
+
+const handleDiscovery = async (c: any) => {
+  const issuer = config.publicBaseUrl.replace(/\/$/, '');
+  const req = new Request(new URL(c.req.path, issuer), {
+    headers: c.req.raw.headers,
+  });
+  const upstream = await discoveryHandler(req);
+  const body = (await upstream.json()) as Record<string, unknown>;
+  body.authorization_response_iss_parameter_supported = true;
+  return c.json(body, upstream.status as any);
+};
+
+app.get('/.well-known/oauth-authorization-server', handleDiscovery);
+app.get('/.well-known/openid-configuration', handleDiscovery);
+
+// RFC 9728 OAuth 2.0 Protected Resource Metadata
+const handlePrm = async (c: any) => {
+  const issuer = config.publicBaseUrl.replace(/\/$/, '');
+  const req = new Request(new URL(c.req.path, issuer), {
+    headers: c.req.raw.headers,
+  });
+  const upstream = await prmHandler(req);
+  const body = (await upstream.json()) as Record<string, unknown>;
+  return c.json(body, upstream.status as any);
+};
+
+app.get('/.well-known/oauth-protected-resource', handlePrm);
+app.get('/.well-known/oauth-protected-resource/*', handlePrm);
 
 // Public API routes
 app.route('/api/images', imagesRoute);

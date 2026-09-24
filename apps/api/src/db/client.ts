@@ -16,7 +16,8 @@ export const db = drizzle(sqlite, { schema });
 try {
   migrate(db, { migrationsFolder: join(__dirname, '../../drizzle') });
 } catch (err: any) {
-  if (!err?.message?.includes('already exists') && !err?.cause?.message?.includes('already exists')) {
+  const msg = `${err?.message || ''} ${err?.cause?.message || ''}`.toLowerCase();
+  if (!msg.includes('already exists') && !msg.includes('duplicate column')) {
     throw err;
   }
 }

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { apiKeys, user as userTable } from '../db/schema.js';
+import { apiKeys, oauthAccessToken, user as userTable } from '../db/schema.js';
 import { config } from '../config.js';
 import { auth } from './auth.js';
 
@@ -73,12 +73,60 @@ export async function resolveMcpIdentity(
     }
   }
 
-  // 3. Check Better Auth session token (Bearer session)
   const headers = new Headers(rawHeaders);
   if (!headers.has('authorization') && cleanToken) {
     headers.set('authorization', `Bearer ${cleanToken}`);
   }
 
+  // 3. Check Better Auth MCP OAuth token (via getMcpSession)
+  try {
+    const mcpSession = await (auth.api as any).getMcpSession({ headers });
+    if (mcpSession?.userId) {
+      const userRecord = await db.query.user.findFirst({
+        where: eq(userTable.id, mcpSession.userId),
+      });
+      const userRole = userRecord?.role || 'user';
+      return {
+        user: {
+          id: mcpSession.userId,
+          role: userRole,
+        },
+        isAdmin: userRole === 'admin',
+      };
+    }
+  } catch {
+    // MCP session lookup failed
+  }
+
+  // 4. Fallback: Direct OAuth access token check in database
+  try {
+    const tokenRecord = await db.query.oauthAccessToken.findFirst({
+      where: eq(oauthAccessToken.accessToken, cleanToken),
+      with: { user: true },
+    });
+
+    if (tokenRecord) {
+      if (tokenRecord.accessTokenExpiresAt && tokenRecord.accessTokenExpiresAt.getTime() < Date.now()) {
+        return null; // Expired token
+      }
+      const userRole = tokenRecord.user?.role || 'user';
+      const targetUserId = tokenRecord.userId || tokenRecord.clientId;
+      if (!targetUserId) {
+        return null;
+      }
+      return {
+        user: {
+          id: targetUserId,
+          role: userRole,
+        },
+        isAdmin: userRole === 'admin',
+      };
+    }
+  } catch {
+    // Direct token lookup fallback failed
+  }
+
+  // 5. Check Better Auth session token (Bearer session)
   try {
     const session = await auth.api.getSession({ headers });
     if (session?.user) {
@@ -97,3 +145,4 @@ export async function resolveMcpIdentity(
 
   return null;
 }
+

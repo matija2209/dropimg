@@ -122,6 +122,77 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   }),
 }));
 
+export const oauthApplication = sqliteTable('oauth_application', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  icon: text('icon'),
+  metadata: text('metadata'),
+  clientId: text('client_id').notNull().unique(),
+  clientSecret: text('client_secret'),
+  redirectUrls: text('redirect_urls').notNull(),
+  type: text('type').notNull(),
+  disabled: integer('disabled', { mode: 'boolean' }).default(false),
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const oauthAccessToken = sqliteTable('oauth_access_token', {
+  id: text('id').primaryKey(),
+  accessToken: text('access_token').notNull().unique(),
+  refreshToken: text('refresh_token').unique(),
+  accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp' }).notNull(),
+  refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp' }),
+  clientId: text('client_id').references(() => oauthApplication.clientId, { onDelete: 'cascade' }),
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+  scopes: text('scopes').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const oauthConsent = sqliteTable('oauth_consent', {
+  id: text('id').primaryKey(),
+  clientId: text('client_id').references(() => oauthApplication.clientId, { onDelete: 'cascade' }),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  scopes: text('scopes').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  consentGiven: integer('consent_given', { mode: 'boolean' }),
+});
+
+export const oauthApplicationRelations = relations(oauthApplication, ({ one, many }) => ({
+  user: one(user, {
+    fields: [oauthApplication.userId],
+    references: [user.id],
+  }),
+  accessTokens: many(oauthAccessToken),
+  consents: many(oauthConsent),
+}));
+
+export const oauthAccessTokenRelations = relations(oauthAccessToken, ({ one }) => ({
+  application: one(oauthApplication, {
+    fields: [oauthAccessToken.clientId],
+    references: [oauthApplication.clientId],
+  }),
+  user: one(user, {
+    fields: [oauthAccessToken.userId],
+    references: [user.id],
+  }),
+}));
+
+export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
+  application: one(oauthApplication, {
+    fields: [oauthConsent.clientId],
+    references: [oauthApplication.clientId],
+  }),
+  user: one(user, {
+    fields: [oauthConsent.userId],
+    references: [user.id],
+  }),
+}));
+
 export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferSelect;
 export type ImageVariant = typeof imageVariants.$inferSelect;
@@ -132,4 +203,10 @@ export type Account = typeof account.$inferSelect;
 export type Verification = typeof verification.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+export type OauthApplication = typeof oauthApplication.$inferSelect;
+export type NewOauthApplication = typeof oauthApplication.$inferInsert;
+export type OauthAccessToken = typeof oauthAccessToken.$inferSelect;
+export type NewOauthAccessToken = typeof oauthAccessToken.$inferInsert;
+export type OauthConsent = typeof oauthConsent.$inferSelect;
+export type NewOauthConsent = typeof oauthConsent.$inferInsert;
 

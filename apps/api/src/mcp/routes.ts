@@ -25,9 +25,14 @@ mcpRoute.use('*', async (c, next) => {
   const identity = await resolveMcpIdentity(token, c.req.raw.headers);
 
   if (!identity && !config.publicMode) {
+    const resourceMetadataUrl = `${config.publicBaseUrl.replace(/\/$/, '')}/.well-known/oauth-protected-resource/api/mcp`;
+    const challengeHeader = `Bearer error="invalid_token", error_description="Unauthorized: Valid User API Key, OAuth Bearer token, or Session token required", resource_metadata="${resourceMetadataUrl}"`;
     return c.json(
-      { error: 'Unauthorized: Valid User API Key, Better Auth Bearer token, or Master token required.' },
-      401
+      { error: 'Unauthorized: Valid User API Key, OAuth Bearer token, or Session token required.' },
+      401,
+      {
+        'WWW-Authenticate': challengeHeader,
+      }
     );
   }
 

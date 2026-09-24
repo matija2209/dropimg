@@ -17,12 +17,37 @@ DropImg connects MCP operations directly to your **Better Auth** user account:
 
 ---
 
-## Authentication & Personal API Keys
+## Authentication Options
 
-External MCP clients can authenticate using either:
-1. **Personal API Keys (Option A)**: Permanent secret keys (`drop_sec_...`).
-2. **Better Auth Session Tokens (Option B)**: Session tokens passed via Bearer auth.
-3. **Master Server Token**: `MCP_API_KEY` or `ADMIN_TOKEN`.
+External MCP clients can authenticate using:
+1. **OAuth 2.0 / OIDC (Option A - Recommended for Claude, ChatGPT, Codex)**: Full dynamic registration, browser-based authorization code flow with PKCE (RFC 7636), and RFC 9207 `iss` protection.
+2. **Personal API Keys (Option B - Recommended for Cursor, CLI, Stdio)**: Permanent secret keys (`drop_sec_...`) scoped to your account.
+3. **Better Auth Session Tokens (Option C)**: Ephemeral session tokens passed via Bearer auth.
+4. **Master Server Token**: `MCP_API_KEY` or `ADMIN_TOKEN` for administrative tasks.
+
+---
+
+## OAuth 2.0 / OIDC for Claude, ChatGPT, and Codex
+
+DropImg implements standard OAuth 2.0 discovery and authorization according to the Model Context Protocol specification:
+
+- **RFC 8414 Authorization Server Discovery**: `/.well-known/oauth-authorization-server` and `/.well-known/openid-configuration`
+- **RFC 9728 Protected Resource Metadata**: `/.well-known/oauth-protected-resource/api/mcp`
+- **RFC 7591 Dynamic Client Registration**: `/api/auth/mcp/register`
+- **OAuth Authorization Endpoint**: `/api/auth/mcp/authorize` (redirects to `/login` if not authenticated, returns `code` + `iss` per RFC 9207)
+- **OAuth Token Endpoint**: `/api/auth/mcp/token` (exchanges authorization code for Bearer access token)
+
+### Connecting from Claude / ChatGPT
+
+1. In Claude or ChatGPT custom GPT/action configuration, point the MCP server URL to:
+   ```
+   https://img.buildwithmatija.com/api/mcp
+   ```
+2. When the client makes an unauthenticated request to `/api/mcp`, DropImg sends a `401 Unauthorized` challenge with the `WWW-Authenticate` header pointing to `/.well-known/oauth-protected-resource/api/mcp`.
+3. The client dynamically registers itself via `/api/auth/mcp/register`, opens your browser to authorize your DropImg account, and exchanges the authorization code for an OAuth access token.
+4. All images uploaded by the AI agent are securely saved into your private gallery.
+
+---
 
 ### Generating a Personal API Key
 

@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "../db/client.js";
 import * as schema from "../db/schema.js";
-import { admin, bearer } from "better-auth/plugins";
+import { admin, bearer, mcp } from "better-auth/plugins";
 import { config } from "../config.js";
 import { count } from "drizzle-orm";
 
@@ -14,6 +14,9 @@ export const auth = betterAuth({
             session: schema.session,
             account: schema.account,
             verification: schema.verification,
+            oauthApplication: schema.oauthApplication,
+            oauthAccessToken: schema.oauthAccessToken,
+            oauthConsent: schema.oauthConsent,
         },
     }),
     emailAndPassword: {
@@ -42,7 +45,23 @@ export const auth = betterAuth({
     },
     plugins: [
         admin(),
-        bearer()
+        bearer(),
+        mcp({
+            loginPage: "/login",
+            resource: `${config.publicBaseUrl}/api/mcp`,
+            oidcConfig: {
+                loginPage: "/login",
+                codeExpiresIn: 600,
+                accessTokenExpiresIn: 3600,
+                refreshTokenExpiresIn: 604_800,
+                defaultScope: "openid",
+                scopes: ["openid", "profile", "email", "offline_access"],
+                allowDynamicClientRegistration: true,
+                metadata: {
+                    scopes_supported: ["openid", "profile", "email", "offline_access"],
+                },
+            },
+        }),
     ],
     advanced: {
         useSecureCookies: true,
