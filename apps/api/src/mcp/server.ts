@@ -78,9 +78,9 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     { name: 'dropimg', version: '1.0.0' },
     {
       capabilities: {
-        tools: {},
+        tools: { listChanged: true },
         resources: { listChanged: true },
-        prompts: {},
+        prompts: { listChanged: true },
       },
       instructions:
         'DropImg MCP Server: Host, process, optimize, retrieve, and delete images with automatic responsive variants, private gallery isolation, and markdown generation. When an image exists in your local container, sandbox, or filesystem, call request_upload_url to generate a signed direct upload URL and upload it with curl instead of generating massive base64 text.',

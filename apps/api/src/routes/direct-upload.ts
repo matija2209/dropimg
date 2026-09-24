@@ -63,7 +63,7 @@ directUpload.get('/', (c) => {
   });
 });
 
-directUpload.post('/', async (c) => {
+directUpload.on(['POST', 'PUT'], '/', async (c) => {
   // 1. Extract Ticket
   const queryTicket = c.req.query('ticket');
   const headerTicket = c.req.header('X-Upload-Ticket');
@@ -142,7 +142,11 @@ directUpload.post('/', async (c) => {
   }
 
   // Sniff format if mimeType is generic or missing
-  if (!mimeType || mimeType === 'application/octet-stream') {
+  if (
+    !mimeType ||
+    mimeType === 'application/octet-stream' ||
+    mimeType === 'application/x-www-form-urlencoded'
+  ) {
     try {
       const meta = await sharp(buffer).metadata();
       if (meta.format) {
