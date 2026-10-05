@@ -6,6 +6,7 @@ export class S3StorageDriver implements StorageDriver {
   private client: S3Client;
   private bucket: string;
   private publicBaseUrl: string;
+  private cdnUrl: string;
 
   constructor(config: {
     endpoint: string;
@@ -15,6 +16,7 @@ export class S3StorageDriver implements StorageDriver {
     secretAccessKey: string;
     forcePathStyle?: boolean;
     publicBaseUrl: string;
+    cdnUrl?: string;
   }) {
     this.client = new S3Client({
       endpoint: config.endpoint,
@@ -27,6 +29,7 @@ export class S3StorageDriver implements StorageDriver {
     });
     this.bucket = config.bucket;
     this.publicBaseUrl = config.publicBaseUrl;
+    this.cdnUrl = (config.cdnUrl || config.publicBaseUrl).replace(/\/$/, '');
   }
 
   async put(input: {
@@ -81,6 +84,6 @@ export class S3StorageDriver implements StorageDriver {
   }
 
   publicUrl(key: string): string {
-    return `${this.publicBaseUrl}/raw/${key}`;
+    return `${this.cdnUrl}/raw/${key}`;
   }
 }

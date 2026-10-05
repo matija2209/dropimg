@@ -10,11 +10,11 @@ type ImageWithVariants = Image & {
 };
 
 export function buildVariantUrl(imageId: string, variant: AssetVariantName): string {
-  return `${config.publicBaseUrl}/api/images/${imageId}/file/${variant}`;
+  return `${config.cdnUrl}/api/images/${imageId}/file/${variant}`;
 }
 
 export function buildBase64Url(imageId: string, variant: AssetVariantName): string {
-  return `${config.publicBaseUrl}/api/images/${imageId}/base64/${variant}`;
+  return `${config.cdnUrl}/api/images/${imageId}/base64/${variant}`;
 }
 
 export function serializeImageAsset(image: ImageWithVariants) {
@@ -70,7 +70,7 @@ export function serializeImageAsset(image: ImageWithVariants) {
     transcoded: image.transcoded ?? false,
     originalSize: image.originalSize ?? null,
     directUrl: original.url,
-    autoUrl: `${config.publicBaseUrl}/api/images/${image.id}/auto`,
+    autoUrl: `${config.cdnUrl}/api/images/${image.id}/auto`,
     original,
     variants,
     responsiveHtml,

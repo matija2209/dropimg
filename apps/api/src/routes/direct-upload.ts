@@ -249,7 +249,7 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
     });
 
     const pageUrl = `${config.appUrl}/i/${id}`;
-    const rawUrl = `${config.publicBaseUrl}/raw/${processed.original.storageKey}`;
+    const rawUrl = `${config.cdnUrl}/raw/${processed.original.storageKey}`;
     const posterUrl = serialized.variants.poster?.url;
     const markdown = posterUrl
       ? `[![${altName || id}](${posterUrl})](${pageUrl})`
@@ -402,7 +402,7 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
   });
 
   const pageUrl = `${config.appUrl}/i/${id}`;
-  const rawUrl = `${config.publicBaseUrl}/raw/${processed.original.storageKey}`;
+  const rawUrl = `${config.cdnUrl}/raw/${processed.original.storageKey}`;
   const markdown = `![${altName || id}](${rawUrl})`;
 
   const resultPayload = {

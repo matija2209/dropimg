@@ -8,6 +8,7 @@ export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   appUrl: process.env.APP_URL || 'http://localhost:3000',
   publicBaseUrl: process.env.PUBLIC_BASE_URL || 'http://localhost:3000',
+  cdnUrl: (process.env.CDN_URL || process.env.PUBLIC_CDN_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
   databaseUrl: process.env.DATABASE_URL || 'file:app.sqlite',
   storageDriver: process.env.STORAGE_DRIVER || 'local',
   uploadDir: process.env.UPLOAD_DIR || 'data/uploads',
@@ -48,11 +49,13 @@ if (config.storageDriver === 'local') {
   storage = new LocalStorageDriver({
     uploadDir: config.uploadDir,
     publicBaseUrl: config.publicBaseUrl,
+    cdnUrl: config.cdnUrl,
   });
 } else if (config.storageDriver === 's3') {
   storage = new S3StorageDriver({
     ...config.s3,
     publicBaseUrl: config.publicBaseUrl,
+    cdnUrl: config.cdnUrl,
   });
 } else {
   throw new Error(`Unsupported storage driver: ${config.storageDriver}`);

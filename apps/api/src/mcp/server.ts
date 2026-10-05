@@ -300,7 +300,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
         });
 
         const pageUrl = `${config.appUrl}/i/${id}`;
-        const rawUrl = `${config.publicBaseUrl}/raw/${processed.original.storageKey}`;
+        const rawUrl = `${config.cdnUrl}/raw/${processed.original.storageKey}`;
         const markdown = `![${altName || id}](${rawUrl})`;
 
         const resultPayload = {
@@ -510,7 +510,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
         });
 
         const pageUrl = `${config.appUrl}/i/${id}`;
-        const rawUrl = `${config.publicBaseUrl}/raw/${processed.original.storageKey}`;
+        const rawUrl = `${config.cdnUrl}/raw/${processed.original.storageKey}`;
         const posterUrl = serialized.variants.poster?.url;
         const markdown = posterUrl
           ? `[![${altName || id}](${posterUrl})](${pageUrl})`
@@ -663,7 +663,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
           height: img.height,
           createdAt: img.createdAt,
           userId: img.userId,
-          url: `${config.publicBaseUrl}/raw/${img.filename}`,
+          url: `${config.cdnUrl}/raw/${img.filename}`,
           pageUrl: `${config.appUrl}/i/${img.id}`,
           thumbnailUrl: serialized.variants?.thumbnail?.url,
         };
@@ -968,7 +968,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
       });
 
       const alt = altText || image?.altName || id;
-      const rawUrl = `${config.publicBaseUrl}/raw/${image?.filename || id}`;
+      const rawUrl = `${config.cdnUrl}/raw/${image?.filename || id}`;
 
       return {
         messages: [
@@ -1001,7 +1001,7 @@ async function handleGetImage(
   }
 
   const serialized = serializeImageAsset(image);
-  const rawUrl = `${config.publicBaseUrl}/raw/${resolved.storageKey}`;
+  const rawUrl = `${config.cdnUrl}/raw/${resolved.storageKey}`;
   const pageUrl = `${config.appUrl}/i/${image.id}`;
 
   const isVideo = image.mediaType === 'video';

@@ -6,10 +6,12 @@ import { StorageDriver, StoredFile } from './types.js';
 export class LocalStorageDriver implements StorageDriver {
   private uploadDir: string;
   private publicBaseUrl: string;
+  private cdnUrl: string;
 
-  constructor(config: { uploadDir: string; publicBaseUrl: string }) {
+  constructor(config: { uploadDir: string; publicBaseUrl: string; cdnUrl?: string }) {
     this.uploadDir = config.uploadDir;
     this.publicBaseUrl = config.publicBaseUrl;
+    this.cdnUrl = (config.cdnUrl || config.publicBaseUrl).replace(/\/$/, '');
   }
 
   async put(input: {
@@ -61,6 +63,6 @@ export class LocalStorageDriver implements StorageDriver {
   }
 
   publicUrl(key: string): string {
-    return `${this.publicBaseUrl}/raw/${key}`;
+    return `${this.cdnUrl}/raw/${key}`;
   }
 }
