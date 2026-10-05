@@ -1,8 +1,28 @@
 import { createMiddleware } from "hono/factory";
 import { auth } from "./auth.js";
 import { config } from "../config.js";
+import { resolveMcpIdentity } from "./mcp-auth.js";
 
 export const authMiddleware = createMiddleware(async (c, next) => {
+  const authHeader = c.req.header("authorization") || c.req.header("Authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7).trim();
+    const identity = await resolveMcpIdentity(token, c.req.raw.headers);
+    if (identity) {
+      if (identity.user) {
+        c.set("user", {
+          id: identity.user.id,
+          role: identity.user.role || (identity.isAdmin ? "admin" : "user"),
+        } as any);
+      } else if (identity.isAdmin) {
+        c.set("user", {
+          role: "admin",
+        } as any);
+      }
+      return await next();
+    }
+  }
+
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

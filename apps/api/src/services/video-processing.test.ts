@@ -299,3 +299,83 @@ test('API route POST /api/upload: directly accepts video and returns serialized 
     config.publicMode = originalPublicMode;
   }
 });
+
+test('API route POST /api/upload: authenticates via Bearer personal API key and associates userId', async () => {
+  const videoBuffer = await generateSampleMp4();
+  const originalPublicMode = config.publicMode;
+  config.publicMode = false; // Auth strictly required
+
+  const testUserId = `test-user-${Date.now()}`;
+  const { generateApiKey } = await import('../lib/mcp-auth.js');
+  const { apiKeys, user: userTable } = await import('../db/schema.js');
+  const { key, keyHash, keyPrefix } = generateApiKey();
+
+  // Create test user and API key
+  db.insert(userTable).values({
+    id: testUserId,
+    name: 'Bearer Test User',
+    email: `${testUserId}@example.com`,
+    emailVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }).run();
+
+  db.insert(apiKeys).values({
+    id: `key-${Date.now()}`,
+    userId: testUserId,
+    name: 'Test Key',
+    keyHash,
+    keyPrefix,
+    createdAt: new Date(),
+  }).run();
+
+  try {
+    const app = new Hono();
+    app.route('/api/upload', upload);
+
+    const boundary = '----WebKitFormBoundaryBearerTest';
+    const header = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="bearer_video.mp4"\r\nContent-Type: video/mp4\r\n\r\n`;
+    const footer = `\r\n--${boundary}--\r\n`;
+    const multipartBody = Buffer.concat([
+      Buffer.from(header, 'utf8'),
+      videoBuffer,
+      Buffer.from(footer, 'utf8'),
+    ]);
+
+    const req = new Request('http://localhost/api/upload', {
+      method: 'POST',
+      headers: {
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+        authorization: `Bearer ${key}`,
+      },
+      body: multipartBody,
+    });
+
+    const res = await app.fetch(req);
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as any;
+    assert.equal(data.mediaType, 'video');
+
+    const dbRecord = await db.query.images.findFirst({
+      where: eq(images.id, data.id),
+      with: { variants: true },
+    });
+    assert.ok(dbRecord);
+    assert.equal(dbRecord.userId, testUserId);
+
+    // Clean up
+    await storage.delete(dbRecord.filename);
+    for (const v of dbRecord.variants) {
+      await storage.delete(v.storageKey);
+    }
+    db.transaction((tx) => {
+      tx.delete(imageVariants).where(eq(imageVariants.imageId, data.id)).run();
+      tx.delete(images).where(eq(images.id, data.id)).run();
+      tx.delete(apiKeys).where(eq(apiKeys.userId, testUserId)).run();
+      tx.delete(userTable).where(eq(userTable.id, testUserId)).run();
+    });
+  } finally {
+    config.publicMode = originalPublicMode;
+  }
+});
+
