@@ -10,6 +10,7 @@ import internalMediaFinalized from './routes/internal-media-finalized.js';
 import serviceImageUpload from './routes/service-image-upload.js';
 import mcpRoute from './mcp/routes.js';
 import apiKeysRoute from './routes/api-keys.js';
+import llmsRoute from './routes/llms-txt.js';
 import { serveRangedFile } from './lib/range-response.js';
 import { db } from './db/client.js';
 import { images } from './db/schema.js';
@@ -98,6 +99,9 @@ const handlePrm = async (c: any) => {
 
 app.get('/.well-known/oauth-protected-resource', handlePrm);
 app.get('/.well-known/oauth-protected-resource/*', handlePrm);
+
+// LLMs and Agent API documentation standard
+app.route('/', llmsRoute);
 
 // Public API routes
 app.route('/api/images', imagesRoute);
