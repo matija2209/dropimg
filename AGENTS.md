@@ -67,33 +67,38 @@ External AI agents authenticate via standard OAuth 2.0 discovery and authorizati
   - Automatically generates responsive variants (`thumbnail`, `card`, `tablet`, `social`).
   - Returns direct raw URL, view page URL, Markdown embed code, responsive `<picture>` tag, and delete token.
   - Automatically saved to the authenticated caller's private gallery (`userId`).
+- **`upload_video`**:
+  - Inputs: `videoData` (base64 string / Data URL) or `videoUrl` (public web link), `filename`, `altName`, `transcode` (boolean).
+  - Automatically probes video dimensions & duration with `ffprobe`, extracts WebP poster frame with `ffmpeg`, and hosts original video.
+  - Returns direct stream URL, HTML5 `<video>` embed code, poster image URL, and duration.
+  - Automatically saved to the authenticated caller's private gallery (`userId`).
 - **`get_image`**:
-  - Inputs: `id` (or storage filename), `variant` (`original`, `thumbnail`, `card`, `tablet`, `social`), `includeImageData` (boolean).
-  - When `includeImageData: true`, returns native MCP base64 image data for multimodal vision models to inspect visually.
+  - Inputs: `id` (or storage filename), `variant` (`original`, `thumbnail`, `card`, `tablet`, `social`, `poster`), `includeImageData` (boolean).
+  - When `includeImageData: true`, returns native MCP base64 image data for multimodal vision models to inspect visually (works with image variants and video poster frames).
 - **`list_images`**:
   - Inputs: `limit` (max 100), `offset`.
   - Scoped to the authenticated caller's gallery (or all images for admins).
 - **`delete_image`**:
   - Inputs: `id`, optional `deleteToken` (owners do not need a delete token).
-  - Removes the image and all variants from storage and database.
+  - Removes the image/video and all variants/posters from storage and database.
 - **`request_upload_url`** *(Sandbox / Claude Web / Container Direct Upload)*:
-  - Inputs: `filename` (optional string), `altName`, `mode`, `quality`, `expiresInMinutes` (default 15).
-  - Generates a signed, single-use upload ticket and pre-formatted `curl` command.
+  - Inputs: `filename` (optional string), `altName`, `mediaType` (`image` | `video`), `mode`, `quality`, `transcode`, `expiresInMinutes` (default 15).
+  - Generates a signed, single-use upload ticket and pre-formatted `curl` command for uploading images or videos.
   - Allows AI agents in sandboxed environments (e.g. Claude Web bash containers) to upload local files directly without passing massive base64 text through LLM context tokens.
 - **`claim_upload_ticket`**:
   - Inputs: `ticketId`.
-  - Retrieves hosted URLs, markdown embed code, and variant details for an image uploaded via a direct ticket.
+  - Retrieves hosted URLs, markdown embed code, HTML5 `<video>` or `<picture>` markup, and variant/poster details.
 
 ### Resources & Prompts
 - **Resource `dropimg://images/{id}`**: Direct JSON metadata, variant links, and dimensions.
-- **Prompt `embed_image`**: Generates pre-formatted Markdown and responsive HTML `<picture>` snippets with custom alt text.
+- **Prompt `embed_image`**: Generates pre-formatted Markdown and responsive HTML `<picture>` or `<video>` snippets with custom alt text.
 
 ---
 
 ## 4. Development & Testing Commands
 
 ```bash
-# Run unit & integration test suite (19 tests covering MCP tools, direct container upload, OAuth discovery, image processing)
+# Run unit & integration test suite (23 tests covering MCP tools, direct container upload, OAuth discovery, image/video processing)
 npm test --workspace=@dropimg/api
 
 # Build all workspaces (TypeScript & Vite)

@@ -4,12 +4,14 @@ import { db } from '../db/client.js';
 import { imageVariants, images } from '../db/schema.js';
 import { storage, config } from '../config.js';
 import { serializeImageAsset } from '../lib/image-assets.js';
+import { isVideoMime, mimeFromFileName } from '../lib/file-mime.js';
 import {
   ImageProcessingError,
   processAndStoreImage,
   uploadModes,
   type UploadMode,
 } from '../services/image-processing.js';
+import { processVideo, VideoProcessingError } from '../services/video-processing.js';
 import {
   verifyAndConsumeUploadTicket,
   storeTicketResult,
@@ -90,8 +92,8 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
   // 3. Extract File from Multipart Form or Raw Binary Body
   const contentType = c.req.header('content-type') || '';
   let buffer: Buffer;
-  let fileName = payload.filename || 'image.png';
-  let mimeType = 'image/png';
+  let fileName = payload.filename || 'media.bin';
+  let mimeType = '';
   let altName = payload.altName || '';
   let mode: UploadMode = payload.mode || 'upload';
   let quality: number | undefined = payload.quality;
@@ -121,14 +123,14 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
     const arrayBuffer = await file.arrayBuffer();
     buffer = Buffer.from(arrayBuffer);
   } else {
-    // Raw binary upload (e.g. curl --data-binary @image.png or Content-Type: image/png)
+    // Raw binary upload (e.g. curl --data-binary @video.mp4 or Content-Type: video/mp4)
     const arrayBuffer = await c.req.arrayBuffer();
     buffer = Buffer.from(arrayBuffer);
 
     if (c.req.header('x-filename')) {
       fileName = decodeURIComponent(c.req.header('x-filename')!);
     }
-    if (contentType.startsWith('image/')) {
+    if (contentType.startsWith('image/') || contentType.startsWith('video/')) {
       mimeType = contentType.split(';')[0].trim();
     }
   }
@@ -137,6 +139,150 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
     return c.json({ error: 'Uploaded file is empty.' }, 400);
   }
 
+  const fileExtMime = fileName ? mimeFromFileName(fileName) : undefined;
+  const isVideo =
+    payload.mediaType === 'video' ||
+    isVideoMime(mimeType) ||
+    mimeType.startsWith('video/') ||
+    (fileExtMime ? isVideoMime(fileExtMime) : false);
+
+  const id = Math.random().toString(36).substring(2, 10);
+  const deleteToken = Math.random().toString(36).substring(2, 15);
+
+  if (isVideo) {
+    if (!config.videoUploadsEnabled) {
+      return c.json({ error: 'Video uploads are disabled on this server.' }, 503);
+    }
+
+    if (buffer.length > config.maxVideoUploadMb * 1024 * 1024) {
+      return c.json({ error: `File size exceeds ${config.maxVideoUploadMb}MB limit` }, 400);
+    }
+
+    let processed;
+    try {
+      processed = await processVideo({
+        id,
+        fileName: fileName.endsWith('.bin') ? (payload.filename || 'video.mp4') : fileName,
+        mimeType: isVideoMime(mimeType) ? mimeType : (fileExtMime || 'video/mp4'),
+        buffer,
+        transcode: payload.transcode,
+        storage,
+      });
+    } catch (error) {
+      if (error instanceof VideoProcessingError) {
+        return c.json({ error: error.message }, error.statusCode as 400 | 500 | 503);
+      }
+      console.error('[direct-upload] Video processing error:', error);
+      return c.json({ error: 'Video processing failed' }, 500);
+    }
+
+    try {
+      db.transaction((tx) => {
+        tx.insert(images).values({
+          id,
+          filename: processed.original.storageKey,
+          altName: altName || null,
+          mimeType: processed.original.mimeType,
+          mediaType: 'video',
+          size: processed.original.size,
+          width: processed.original.width,
+          height: processed.original.height,
+          durationMs: processed.durationMs,
+          transcoded: processed.transcoded,
+          originalSize: processed.originalSize,
+          isAnimated: false,
+          deleteToken,
+          userId: payload.userId || null,
+          source: 'mcp-direct',
+          createdAt: new Date(),
+        }).run();
+
+        if (processed.variants.length > 0) {
+          tx.insert(imageVariants).values(
+            processed.variants.map((v) => ({
+              imageId: id,
+              variant: v.variant,
+              storageKey: v.storageKey,
+              mimeType: v.mimeType,
+              size: v.size,
+              width: v.width,
+              height: v.height,
+            }))
+          ).run();
+        }
+      });
+    } catch (error) {
+      await Promise.allSettled([
+        storage.delete(processed.original.storageKey),
+        ...processed.variants.map((v) => storage.delete(v.storageKey)),
+      ]);
+      console.error('[direct-upload] Database error:', error);
+      return c.json({ error: 'Failed to save video record to database' }, 500);
+    }
+
+    const serialized = serializeImageAsset({
+      id,
+      filename: processed.original.storageKey,
+      altName: altName || null,
+      mimeType: processed.original.mimeType,
+      mediaType: 'video',
+      durationMs: processed.durationMs,
+      transcoded: processed.transcoded,
+      originalSize: processed.originalSize,
+      size: processed.original.size,
+      width: processed.original.width,
+      height: processed.original.height,
+      isAnimated: false,
+      deleteToken,
+      userId: payload.userId || null,
+      source: 'mcp-direct',
+      createdAt: new Date(),
+      variants: processed.variants.map((v) => ({
+        imageId: id,
+        variant: v.variant,
+        storageKey: v.storageKey,
+        mimeType: v.mimeType,
+        size: v.size,
+        width: v.width,
+        height: v.height,
+      })),
+    });
+
+    const pageUrl = `${config.appUrl}/i/${id}`;
+    const rawUrl = `${config.publicBaseUrl}/raw/${processed.original.storageKey}`;
+    const posterUrl = serialized.variants.poster?.url;
+    const markdown = posterUrl
+      ? `[![${altName || id}](${posterUrl})](${pageUrl})`
+      : `[Watch Video: ${altName || id}](${pageUrl})`;
+
+    const resultPayload = {
+      id,
+      pageUrl,
+      rawUrl,
+      directUrl: serialized.directUrl,
+      posterUrl,
+      markdown,
+      responsiveHtml: serialized.responsiveHtml,
+      videoHtml: serialized.videoHtml,
+      mediaType: 'video',
+      mimeType: processed.original.mimeType,
+      width: processed.original.width,
+      height: processed.original.height,
+      durationMs: processed.durationMs,
+      size: processed.original.size,
+      deleteToken,
+      deleteUrl: `${config.appUrl}/api/images/${id}?token=${deleteToken}`,
+      variants: serialized.variants,
+      processing: processed.processing,
+      userId: payload.userId || null,
+      ticketId: payload.ticketId,
+    };
+
+    storeTicketResult(payload.ticketId, resultPayload);
+    return c.json(resultPayload, 201);
+  }
+
+  // --- Image processing ---
   if (buffer.length > config.maxUploadMb * 1024 * 1024) {
     return c.json({ error: `File size exceeds ${config.maxUploadMb}MB limit` }, 400);
   }
@@ -153,7 +299,7 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
         mimeType = `image/${meta.format === 'jpg' ? 'jpeg' : meta.format}`;
       }
     } catch {
-      // Keep fallback
+      mimeType = fileExtMime || 'image/png';
     }
   }
 
@@ -161,14 +307,12 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
     return c.json({ error: `File type ${mimeType} not allowed` }, 400);
   }
 
-  const id = Math.random().toString(36).substring(2, 10);
-  const deleteToken = Math.random().toString(36).substring(2, 15);
   let processed;
 
   try {
     processed = await processAndStoreImage({
       id,
-      fileName,
+      fileName: fileName.endsWith('.bin') ? (payload.filename || 'image.png') : fileName,
       mimeType,
       buffer,
       mode,

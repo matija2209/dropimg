@@ -5,10 +5,12 @@
 | Asset | Route | Handler |
 |-------|-------|---------|
 | Images | `POST /api/upload` | Hono + Sharp |
+| Videos (direct) | `POST /api/upload` | Hono + FFmpeg (metadata & poster extraction) |
+| Direct / Sandbox (ticket) | `POST /api/upload/direct` | Hono + Sharp / FFmpeg (signed tickets, curl) |
 | Service images | `POST /api/service/image-upload` | Bearer auth + caller-defined S3 key |
-| Videos | `/api/upload/chunked/*` | Go uploader → `POST /api/internal/media-finalized` |
+| Videos (chunked) | `/api/upload/chunked/*` | Go uploader → `POST /api/internal/media-finalized` |
 
-Videos are rejected on the direct upload route. Image modes (compress, strip metadata, etc.) remain image-only.
+Direct video uploads are supported via standard `POST /api/upload` (multipart) and `/api/upload/direct` (signed curl tickets). Image transform modes (compress-jpg, strip-metadata, etc.) remain image-only.
 
 ## Service image upload
 

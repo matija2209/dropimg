@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync, statSync } from 'node:fs';
 
 export function runFfmpegTranscode(input: string, output: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -55,18 +56,30 @@ export function runFfmpegTranscode(input: string, output: string): Promise<void>
   });
 }
 
-export function runFfmpegPosterFrame(input: string, output: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', ['-ss', '1', '-i', input, '-vframes', '1', '-y', output]);
 
-    const stderr: string[] = [];
-    proc.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()));
-    proc.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg poster exited ${code}:\n${stderr.slice(-5).join('')}`));
+export function runFfmpegPosterFrame(input: string, output: string, seekSec = 1): Promise<void> {
+  const trySeek = (sec: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const proc = spawn('ffmpeg', ['-ss', String(sec), '-i', input, '-vframes', '1', '-y', output]);
+
+      const stderr: string[] = [];
+      proc.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()));
+      proc.on('close', (code) => {
+        if (code === 0 && existsSync(output) && statSync(output).size > 0) {
+          resolve();
+        } else {
+          reject(new Error(`ffmpeg poster exited ${code} (empty=${!existsSync(output)}):\n${stderr.slice(-5).join('')}`));
+        }
+      });
+      proc.on('error', (err) => {
+        reject(err);
+      });
     });
-    proc.on('error', (err) => {
-      reject(err);
-    });
+
+  return trySeek(seekSec).catch((err) => {
+    if (seekSec !== 0) {
+      return trySeek(0);
+    }
+    throw err;
   });
 }

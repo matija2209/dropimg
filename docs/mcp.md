@@ -95,11 +95,12 @@ DELETE /api/user/api-keys/:id
 | Tool | Description | Inputs |
 | :--- | :--- | :--- |
 | `upload_image` | Upload and host an image on DropImg (saved to your private gallery) | `imageData` (base64) OR `imageUrl` (web link), `altName`, `mode` (`upload`, `compress-jpg`, `png-to-jpg`, `strip-metadata`, `remove-background`), `quality` (1-100) |
-| `get_image` | Retrieve metadata, direct URLs, variants, and optional base64 image content | `id`, `variant` (`original`, `thumbnail`, `card`, `tablet`, `social`), `includeImageData` (boolean) |
+| `upload_video` | Upload, probe, extract poster, and host a video on DropImg | `videoData` (base64) OR `videoUrl` (web link), `filename`, `altName`, `transcode` (boolean) |
+| `get_image` | Retrieve metadata, direct URLs, variants, and optional base64 image/poster content | `id`, `variant` (`original`, `thumbnail`, `card`, `tablet`, `social`, `poster`), `includeImageData` (boolean) |
 | `list_images` | List your private images with pagination | `limit` (default 20, max 100), `offset` (default 0) |
-| `delete_image` | Delete an image and its variants | `id`, `deleteToken` (not required if you are the owner) |
-| `request_upload_url` | Generate a signed, single-use upload ticket and curl command for direct container/sandbox uploads (Claude Web, code execution sandboxes) | `filename`, `altName`, `mode`, `quality`, `expiresInMinutes` |
-| `claim_upload_ticket` | Retrieve hosted URLs, markdown embed code, and metadata using a ticket ID | `ticketId` |
+| `delete_image` | Delete an image/video and its variants | `id`, `deleteToken` (not required if you are the owner) |
+| `request_upload_url` | Generate a signed, single-use upload ticket and curl command for direct container/sandbox image or video uploads (Claude Web, code execution sandboxes) | `filename`, `altName`, `mediaType` (`image`, `video`), `mode`, `quality`, `transcode`, `expiresInMinutes` |
+| `claim_upload_ticket` | Retrieve hosted URLs, markdown embed code, HTML5 video/picture markup, and metadata using a ticket ID | `ticketId` |
 
 ### 2. Resources
 - `dropimg://images/{id}`: Direct metadata and variant links for an image asset.

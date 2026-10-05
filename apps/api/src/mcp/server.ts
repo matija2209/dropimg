@@ -18,6 +18,8 @@ import {
   type UploadMode,
   ImageProcessingError,
 } from '../services/image-processing.js';
+import { isVideoMime, mimeFromFileName } from '../lib/file-mime.js';
+import { processVideo, VideoProcessingError } from '../services/video-processing.js';
 import type { ResolvedMcpIdentity } from '../lib/mcp-auth.js';
 
 export async function readBodyToBuffer(body: unknown): Promise<Buffer> {
@@ -336,6 +338,233 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     }
   );
 
+  // 1b. Tool: upload_video
+  server.registerTool(
+    'upload_video',
+    {
+      title: 'Upload Video',
+      description:
+        'Uploads a video to DropImg from a remote URL or base64 data string, generates a poster frame, extracts metadata, and returns playback URLs and HTML5 video embed code.',
+      inputSchema: z.object({
+        videoData: z
+          .string()
+          .optional()
+          .describe('Base64 encoded video string or Data URL (e.g. data:video/mp4;base64,...). Required if videoUrl is not provided.'),
+        videoUrl: z
+          .string()
+          .url()
+          .optional()
+          .describe('Public HTTP/HTTPS URL of a video to download and host. Required if videoData is not provided.'),
+        filename: z
+          .string()
+          .optional()
+          .describe('Optional filename with video extension (e.g. "demo.mp4", "clip.webm").'),
+        altName: z
+          .string()
+          .optional()
+          .describe('Optional descriptive title or caption for the video.'),
+        transcode: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('Optional transcode to web-optimized H.264 MP4 with faststart streaming.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ videoData, videoUrl, filename, altName, transcode = false }): Promise<CallToolResult> => {
+      if (!config.videoUploadsEnabled) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: 'Error: Video uploads are disabled on this server.' }],
+        };
+      }
+
+      if (!videoData && !videoUrl) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: 'Error: Either videoData or videoUrl must be provided.' }],
+        };
+      }
+
+      let buffer: Buffer;
+      let detectedMime = 'video/mp4';
+      let originalFilename = filename || 'video.mp4';
+
+      try {
+        if (videoData) {
+          let base64Content = videoData;
+          const dataUrlMatch = videoData.match(/^data:([^;]+);base64,(.+)$/);
+          if (dataUrlMatch) {
+            detectedMime = dataUrlMatch[1];
+            base64Content = dataUrlMatch[2];
+          }
+          buffer = Buffer.from(base64Content, 'base64');
+        } else if (videoUrl) {
+          const response = await fetch(videoUrl);
+          if (!response.ok) {
+            return {
+              isError: true,
+              content: [{ type: 'text', text: `Failed to fetch video from URL: HTTP ${response.status} ${response.statusText}` }],
+            };
+          }
+          const arrayBuf = await response.arrayBuffer();
+          buffer = Buffer.from(arrayBuf);
+          const headerMime = response.headers.get('content-type')?.split(';')[0]?.trim();
+          if (headerMime) detectedMime = headerMime;
+          try {
+            const urlObj = new URL(videoUrl);
+            const pathname = urlObj.pathname;
+            const nameFromPath = pathname.substring(pathname.lastIndexOf('/') + 1);
+            if (nameFromPath) originalFilename = nameFromPath;
+          } catch {
+            // ignore
+          }
+        } else {
+          return { isError: true, content: [{ type: 'text', text: 'No video provided.' }] };
+        }
+
+        if (buffer.length === 0) {
+          return { isError: true, content: [{ type: 'text', text: 'Provided video is empty (0 bytes).' }] };
+        }
+
+        if (buffer.length > config.maxVideoUploadMb * 1024 * 1024) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: `Video size exceeds ${config.maxVideoUploadMb}MB limit.` }],
+          };
+        }
+
+        const id = Math.random().toString(36).substring(2, 10);
+        const deleteToken = Math.random().toString(36).substring(2, 15);
+
+        const processed = await processVideo({
+          id,
+          fileName: originalFilename,
+          mimeType: detectedMime,
+          buffer,
+          transcode,
+          storage,
+        });
+
+        db.transaction((tx) => {
+          tx.insert(images).values({
+            id,
+            filename: processed.original.storageKey,
+            altName: altName || null,
+            mimeType: processed.original.mimeType,
+            mediaType: 'video',
+            size: processed.original.size,
+            width: processed.original.width,
+            height: processed.original.height,
+            durationMs: processed.durationMs,
+            transcoded: processed.transcoded,
+            originalSize: processed.originalSize,
+            isAnimated: false,
+            deleteToken,
+            userId: callerUser?.id || null,
+            source: 'mcp',
+            createdAt: new Date(),
+          }).run();
+
+          if (processed.variants.length > 0) {
+            tx.insert(imageVariants).values(
+              processed.variants.map((v) => ({
+                imageId: id,
+                variant: v.variant,
+                storageKey: v.storageKey,
+                mimeType: v.mimeType,
+                size: v.size,
+                width: v.width,
+                height: v.height,
+              }))
+            ).run();
+          }
+        });
+
+        const serialized = serializeImageAsset({
+          id,
+          filename: processed.original.storageKey,
+          altName: altName || null,
+          mimeType: processed.original.mimeType,
+          mediaType: 'video',
+          durationMs: processed.durationMs,
+          transcoded: processed.transcoded,
+          originalSize: processed.originalSize,
+          size: processed.original.size,
+          width: processed.original.width,
+          height: processed.original.height,
+          isAnimated: false,
+          deleteToken,
+          userId: callerUser?.id || null,
+          source: 'mcp',
+          createdAt: new Date(),
+          variants: processed.variants.map((v) => ({
+            imageId: id,
+            variant: v.variant,
+            storageKey: v.storageKey,
+            mimeType: v.mimeType,
+            size: v.size,
+            width: v.width,
+            height: v.height,
+          })),
+        });
+
+        const pageUrl = `${config.appUrl}/i/${id}`;
+        const rawUrl = `${config.publicBaseUrl}/raw/${processed.original.storageKey}`;
+        const posterUrl = serialized.variants.poster?.url;
+        const markdown = posterUrl
+          ? `[![${altName || id}](${posterUrl})](${pageUrl})`
+          : `[Watch Video: ${altName || id}](${pageUrl})`;
+
+        const resultPayload = {
+          id,
+          pageUrl,
+          rawUrl,
+          directUrl: serialized.directUrl,
+          posterUrl,
+          markdown,
+          videoHtml: serialized.videoHtml,
+          responsiveHtml: serialized.responsiveHtml,
+          mediaType: 'video',
+          mimeType: processed.original.mimeType,
+          width: processed.original.width,
+          height: processed.original.height,
+          durationMs: processed.durationMs,
+          size: processed.original.size,
+          deleteToken,
+          variants: serialized.variants,
+          processing: processed.processing,
+          userId: callerUser?.id || null,
+        };
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                `Video successfully uploaded and hosted on DropImg!\n\n` +
+                `- **ID**: \`${id}\`\n` +
+                `- **Direct Stream URL**: ${rawUrl}\n` +
+                `- **Page View**: ${pageUrl}\n` +
+                `- **Video HTML**: \`${serialized.videoHtml}\`\n` +
+                `- **Poster**: ${posterUrl || 'None'}\n` +
+                `- **Duration**: ${processed.durationMs ? `${(processed.durationMs / 1000).toFixed(1)}s` : 'Unknown'}\n` +
+                `- **Dimensions**: ${processed.original.width || '?'}x${processed.original.height || '?'} (${processed.original.mimeType})\n` +
+                `- **Delete Token**: \`${deleteToken}\`${callerUser ? `\n- **Owner**: \`${callerUser.id}\` (Private Gallery)` : ''}`,
+            },
+          ],
+          structuredContent: resultPayload,
+        };
+      } catch (error) {
+        const msg = error instanceof VideoProcessingError ? error.message : (error as Error).message;
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `Video upload failed: ${msg}` }],
+        };
+      }
+    }
+  );
+
   // 2. Tool: get_image
   server.registerTool(
     'get_image',
@@ -346,10 +575,10 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
       inputSchema: z.object({
         id: z.string().describe('The unique image ID or storage filename.'),
         variant: z
-          .enum(['original', 'thumbnail', 'card', 'tablet', 'social'])
+          .enum(['original', 'thumbnail', 'card', 'tablet', 'social', 'poster'])
           .optional()
           .default('original')
-          .describe('Image variant to fetch.'),
+          .describe('Asset variant to fetch (use "poster" for video poster frame).'),
         includeImageData: z
           .boolean()
           .optional()
@@ -532,22 +761,26 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     {
       title: 'Request Direct Upload URL',
       description:
-        'Generates a signed, temporary direct upload URL and curl command to upload an image directly from your local sandbox container or terminal. Use this when you have an image file inside your Claude sandbox, container, or terminal, avoiding large base64 tokens in chat context.',
+        'Generates a signed, temporary direct upload URL and curl command to upload an image or video directly from your local sandbox container or terminal. Use this when you have a file inside your Claude sandbox, container, or terminal, avoiding large base64 tokens in chat context.',
       inputSchema: z.object({
         filename: z
           .string()
           .optional()
-          .describe('Optional filename of the image in your local container (e.g. "screenshot.png").'),
+          .describe('Optional filename of the file in your local container (e.g. "screenshot.png" or "recording.mp4").'),
         altName: z
           .string()
           .optional()
-          .describe('Optional descriptive title or alt text for the image.'),
+          .describe('Optional descriptive title or alt text for the media.'),
+        mediaType: z
+          .enum(['image', 'video'])
+          .optional()
+          .describe('Media type: "image" or "video". If omitted, inferred automatically from filename extension (e.g. .mp4, .mov, .webm).'),
         mode: z
           .enum(uploadModes)
           .optional()
           .default('upload')
           .describe(
-            "Processing mode: 'upload' (default), 'compress-jpg', 'png-to-jpg', 'strip-metadata', or 'remove-background'."
+            "Processing mode for images: 'upload' (default), 'compress-jpg', 'png-to-jpg', 'strip-metadata', or 'remove-background'."
           ),
         quality: z
           .number()
@@ -556,6 +789,11 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
           .max(100)
           .optional()
           .describe('Optional compression quality from 1 to 100.'),
+        transcode: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('For video uploads: transcode to web-optimized H.264 MP4.'),
         expiresInMinutes: z
           .number()
           .int()
@@ -567,7 +805,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
-    async ({ filename, altName, mode, quality, expiresInMinutes }): Promise<CallToolResult> => {
+    async ({ filename, altName, mediaType, mode, quality, transcode = false, expiresInMinutes }): Promise<CallToolResult> => {
       const userId = callerUser?.id || (config.publicMode ? 'anonymous' : null);
       if (!userId) {
         return {
@@ -581,26 +819,34 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
         };
       }
 
+      const fileExtMime = filename ? mimeFromFileName(filename) : undefined;
+      const isVideo =
+        mediaType === 'video' ||
+        (fileExtMime ? isVideoMime(fileExtMime) : false);
+
       const { ticket, ticketId, expiresAt } = createUploadTicket({
         userId,
         filename,
         altName,
         mode: mode as UploadMode,
         quality,
+        mediaType: isVideo ? 'video' : 'image',
+        transcode,
         expiresInSeconds: (expiresInMinutes || 15) * 60,
       });
 
       const uploadUrl = `${config.publicBaseUrl.replace(/\/$/, '')}/api/upload/direct?ticket=${ticket}`;
-      const targetFile = filename || 'image.png';
+      const targetFile = filename || (isVideo ? 'video.mp4' : 'image.png');
       const curlCommand = `curl -s -X POST -F "file=@${targetFile}" "${uploadUrl}"`;
 
       const responsePayload = {
         uploadUrl,
         ticketId,
+        mediaType: isVideo ? 'video' : 'image',
         expiresAt: expiresAt.toISOString(),
         curlCommand,
         instructions:
-          'Run the curl command directly in your sandbox/container shell. Once finished, parse the JSON response for directUrl, markdown, and pictureHtml.',
+          'Run the curl command directly in your sandbox/container shell. Once finished, parse the JSON response for directUrl, markdown, and responsive HTML.',
       };
 
       return {
@@ -610,10 +856,11 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
             text:
               `Direct Upload URL generated successfully!\n\n` +
               `- **Ticket ID**: \`${ticketId}\`\n` +
+              `- **Media Type**: \`${isVideo ? 'video' : 'image'}\`\n` +
               `- **Expires At**: ${expiresAt.toISOString()}\n\n` +
               `**Execute this command in your sandbox/container shell**:\n` +
               `\`\`\`bash\n${curlCommand}\n\`\`\`\n\n` +
-              `The curl response will return the final image URLs, markdown embed code, and responsive HTML snippets.`,
+              `The curl response will return the final ${isVideo ? 'video stream' : 'image'} URLs, embed code, and responsive HTML snippets.`,
           },
         ],
         structuredContent: responsePayload,
@@ -647,17 +894,22 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
         };
       }
 
+      const isVideo = result.mediaType === 'video';
+      const embedLines = isVideo
+        ? `- **Video HTML**: \`${result.videoHtml || result.responsiveHtml}\`\n- **Poster**: ${result.posterUrl || 'None'}\n- **Duration**: ${result.durationMs ? `${(Number(result.durationMs) / 1000).toFixed(1)}s` : 'Unknown'}`
+        : `- **Markdown**: \`${result.markdown}\``;
+
       return {
         content: [
           {
             type: 'text',
             text:
-              `Image details for ticket \`${ticketId}\`:\n\n` +
+              `${isVideo ? 'Video' : 'Image'} details for ticket \`${ticketId}\`:\n\n` +
               `- **ID**: \`${result.id}\`\n` +
               `- **Direct URL**: ${result.rawUrl || result.directUrl}\n` +
               `- **Page View**: ${result.pageUrl}\n` +
-              `- **Markdown**: \`${result.markdown}\`\n` +
-              `- **Dimensions**: ${result.width}x${result.height} (${result.mimeType})\n` +
+              `${embedLines}\n` +
+              `- **Dimensions**: ${result.width || '?'}x${result.height || '?'} (${result.mimeType})\n` +
               `- **Delete Token**: \`${result.deleteToken}\``,
           },
         ],
@@ -752,21 +1004,26 @@ async function handleGetImage(
   const rawUrl = `${config.publicBaseUrl}/raw/${resolved.storageKey}`;
   const pageUrl = `${config.appUrl}/i/${image.id}`;
 
+  const isVideo = image.mediaType === 'video';
+  const embedText = isVideo
+    ? `- **Video HTML**: \`${serialized.videoHtml}\`\n- **Duration**: ${image.durationMs ? `${(image.durationMs / 1000).toFixed(1)}s` : 'Unknown'}`
+    : `- **Markdown**: \`![${image.altName || image.id}](${rawUrl})\``;
+
   const contentBlocks: CallToolResult['content'] = [
     {
       type: 'text',
-      text: `### Image: \`${image.id}\`\n\n- **Variant**: \`${resolved.variant}\`\n- **URL**: ${rawUrl}\n- **Page**: ${pageUrl}\n- **Dimensions**: ${image.width || '?'}x${image.height || '?'} (${image.mimeType})\n- **Size**: ${(image.size / 1024).toFixed(1)} KB\n- **Markdown**: \`![${image.altName || image.id}](${rawUrl})\``,
+      text: `### ${isVideo ? 'Video' : 'Image'}: \`${image.id}\`\n\n- **Variant**: \`${resolved.variant}\`\n- **URL**: ${rawUrl}\n- **Page**: ${pageUrl}\n- **Dimensions**: ${image.width || '?'}x${image.height || '?'} (${image.mimeType})\n- **Size**: ${(image.size / 1024).toFixed(1)} KB\n${embedText}`,
     },
   ];
 
-  if (includeImageData && image.mediaType !== 'video') {
+  if (includeImageData && (image.mediaType !== 'video' || resolved.variant === 'poster')) {
     try {
       const { body, mimeType } = await storage.get(resolved.storageKey);
       const buf = await readBodyToBuffer(body);
       contentBlocks.push({
         type: 'image',
         data: buf.toString('base64'),
-        mimeType: mimeType || resolved.mimeType || 'image/png',
+        mimeType: mimeType || resolved.mimeType || (image.mediaType === 'video' ? 'image/webp' : 'image/png'),
       });
     } catch (err) {
       console.error(`Failed to read image data for MCP tool:`, err);

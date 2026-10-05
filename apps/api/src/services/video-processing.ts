@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { config } from '../config.js';
@@ -51,45 +51,66 @@ export type ProcessedVideo = {
   };
 };
 
-export async function processStagedVideo(input: {
+export type ProcessVideoInput = {
   id: string;
-  staged: StagedUpload;
+  fileName: string;
+  mimeType?: string;
+  buffer?: Buffer;
+  filePath?: string;
+  fileSize?: number;
   altName?: string;
-  transcode: boolean;
+  transcode?: boolean;
   storage: StorageDriver;
-}): Promise<ProcessedVideo> {
-  if (config.storageDriver !== 's3') {
-    throw new VideoProcessingError('Chunked video uploads require S3 storage (STORAGE_DRIVER=s3).', 503);
-  }
+};
 
-  const mimeType = resolveVideoMimeType(input.staged.fileName, input.staged.mimeType);
+export async function processVideo(input: ProcessVideoInput): Promise<ProcessedVideo> {
+  const mimeType = resolveVideoMimeType(input.fileName, input.mimeType);
   if (!isVideoMime(mimeType)) {
     throw new VideoProcessingError(`File type ${mimeType} is not a supported video format.`);
   }
 
-  const shouldTranscode = input.transcode && config.videoTranscodeEnabled;
+  if (!input.buffer && !input.filePath) {
+    throw new VideoProcessingError('No video content provided.', 400);
+  }
+
   const tmpDir = await mkdtemp(join(tmpdir(), 'dropimg-vid-'));
-  const inputExt = extname(input.staged.fileName) || '.mp4';
-  const inputPath = join(tmpDir, `in${inputExt}`);
+  const inputExt = extname(input.fileName) || '.mp4';
+  const inputPath = input.filePath || join(tmpDir, `in${inputExt}`);
   const transcodePath = join(tmpDir, 'out.mp4');
   const posterFramePath = join(tmpDir, 'poster.jpg');
 
   try {
-    await downloadStagedToFile(input.staged, inputPath);
+    if (input.buffer && !input.filePath) {
+      await writeFile(inputPath, input.buffer);
+    }
 
+    const sourceStats = await stat(inputPath);
+    const sourceSize = input.fileSize ?? input.buffer?.length ?? sourceStats.size;
+
+    const shouldTranscode = Boolean(input.transcode && config.videoTranscodeEnabled);
     let workingPath = inputPath;
     let outputMime = mimeType;
     let transcoded = false;
 
     if (shouldTranscode) {
-      await runFfmpegTranscode(inputPath, transcodePath);
-      await assertTvReadyOutput(transcodePath);
-      workingPath = transcodePath;
-      outputMime = 'video/mp4';
-      transcoded = true;
+      try {
+        await runFfmpegTranscode(inputPath, transcodePath);
+        await assertTvReadyOutput(transcodePath);
+        workingPath = transcodePath;
+        outputMime = 'video/mp4';
+        transcoded = true;
+      } catch (err: any) {
+        console.warn('[video] Transcode failed, falling back to original:', err?.message || err);
+      }
     }
 
-    const probe = await probeVideoFile(workingPath);
+    let probe = null;
+    try {
+      probe = await probeVideoFile(workingPath);
+    } catch (err) {
+      console.warn('[video] ffprobe metadata extraction failed:', err);
+    }
+
     const videoBuffer = await readFile(workingPath);
     const originalExt = transcoded ? '.mp4' : inputExt;
     const originalKey = `${input.id}/original${originalExt}`;
@@ -103,7 +124,8 @@ export async function processStagedVideo(input: {
     const variants: ProcessedVideo['variants'] = [];
 
     try {
-      await runFfmpegPosterFrame(workingPath, posterFramePath);
+      await runFfmpegPosterFrame(workingPath, posterFramePath, 1);
+
       const posterWebp = await sharp(await readFile(posterFramePath))
         .webp({ quality: 82 })
         .toBuffer();
@@ -139,17 +161,52 @@ export async function processStagedVideo(input: {
       variants,
       durationMs: probe?.durationMs ?? null,
       transcoded,
-      originalSize: transcoded ? input.staged.fileSize : null,
+      originalSize: transcoded ? sourceSize : null,
       processing: {
         mode: 'video',
         sourceMimeType: mimeType,
-        sourceSize: input.staged.fileSize,
+        sourceSize,
         outputMimeType: outputMime,
         outputSize: videoBuffer.length,
         transcoded,
       },
     };
+  } catch (error: any) {
+    if (error instanceof VideoProcessingError) throw error;
+    throw new VideoProcessingError(`Video processing failed: ${error?.message || error}`, 500);
   } finally {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+export async function processStagedVideo(input: {
+  id: string;
+  staged: StagedUpload;
+  altName?: string;
+  transcode: boolean;
+  storage: StorageDriver;
+}): Promise<ProcessedVideo> {
+  if (config.storageDriver !== 's3') {
+    throw new VideoProcessingError('Chunked video uploads require S3 storage (STORAGE_DRIVER=s3).', 503);
+  }
+
+  const tmpDir = await mkdtemp(join(tmpdir(), 'dropimg-staged-'));
+  const inputExt = extname(input.staged.fileName) || '.mp4';
+  const inputPath = join(tmpDir, `staged${inputExt}`);
+
+  try {
+    await downloadStagedToFile(input.staged, inputPath);
+    return await processVideo({
+      id: input.id,
+      fileName: input.staged.fileName,
+      mimeType: input.staged.mimeType,
+      filePath: inputPath,
+      fileSize: input.staged.fileSize,
+      altName: input.altName,
+      transcode: input.transcode,
+      storage: input.storage,
+    });
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }

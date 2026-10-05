@@ -9,6 +9,8 @@ export interface UploadTicketPayload {
   altName?: string;
   mode?: UploadMode;
   quality?: number;
+  mediaType?: 'image' | 'video';
+  transcode?: boolean;
   exp: number; // Unix timestamp in ms
 }
 
@@ -48,6 +50,8 @@ export function createUploadTicket(params: {
   altName?: string;
   mode?: UploadMode;
   quality?: number;
+  mediaType?: 'image' | 'video';
+  transcode?: boolean;
   expiresInSeconds?: number;
 }): { ticket: string; ticketId: string; expiresAt: Date } {
   const ticketId = `tkt_${crypto.randomBytes(16).toString('hex')}`;
@@ -62,6 +66,8 @@ export function createUploadTicket(params: {
     altName: params.altName,
     mode: params.mode,
     quality: params.quality,
+    mediaType: params.mediaType,
+    transcode: params.transcode,
     exp,
   };
 
