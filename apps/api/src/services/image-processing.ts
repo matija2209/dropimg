@@ -249,7 +249,8 @@ async function transformCanonicalImage(input: {
   };
 }): Promise<TransformResult> {
   const width = input.metadata.width ?? null;
-  const height = input.metadata.height ?? null;
+  // Metadata read with `animated: true` reports the height of all frames stacked; `pageHeight` is one frame.
+  const height = input.metadata.pageHeight ?? input.metadata.height ?? null;
   const isAnimated = (input.metadata.pages ?? 1) > 1;
 
   if (input.mode === 'upload') {

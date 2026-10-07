@@ -72,6 +72,46 @@ test('compress-jpg stores a smaller canonical JPG and keeps variants', async () 
   assert.ok(processed.variants.length > 0);
 });
 
+test('upload mode stores an animated GIF unchanged and reports the height of one frame', async () => {
+  const storage = new MemoryStorageDriver();
+  const frameWidth = 16;
+  const frameHeight = 9;
+  const frameCount = 3;
+  const frames = await Promise.all(
+    Array.from({ length: frameCount }, (_, index) =>
+      sharp({
+        create: {
+          width: frameWidth,
+          height: frameHeight,
+          channels: 3,
+          background: { r: index * 80, g: 20, b: 20 },
+        },
+      })
+        .png()
+        .toBuffer()
+    )
+  );
+  const source = await sharp(frames, { join: { animated: true } })
+    .gif({ loop: 0, delay: [100, 100, 100] })
+    .toBuffer();
+
+  const processed = await processAndStoreImage({
+    id: 'animated-gif',
+    fileName: 'loop.gif',
+    mimeType: 'image/gif',
+    buffer: source,
+    mode: 'upload',
+    storage,
+  });
+
+  assert.equal(processed.isAnimated, true);
+  assert.equal(processed.original.mimeType, 'image/gif');
+  assert.equal(processed.original.size, source.length);
+  assert.equal(processed.original.width, frameWidth);
+  assert.equal(processed.original.height, frameHeight);
+  assert.equal(processed.variants.length, 0);
+});
+
 test('compress-jpg rejects non-JPG uploads', async () => {
   const storage = new MemoryStorageDriver();
   const source = await sharp({
