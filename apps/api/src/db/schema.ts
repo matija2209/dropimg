@@ -91,6 +91,22 @@ export const imageVariants = sqliteTable(
   (table) => [primaryKey({ columns: [table.imageId, table.variant] })]
 );
 
+export const documents = sqliteTable('documents', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  originalFilename: text('original_filename').notNull(),
+  altName: text('alt_name'),
+  storageKey: text('storage_key').notNull().unique(),
+  mimeType: text('mime_type').notNull().default('application/pdf'),
+  size: integer('size').notNull(),
+  pageCount: integer('page_count'),
+  visibility: text('visibility').notNull().default('private'),
+  source: text('source').notNull().default('mcp-direct'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 export const imagesRelations = relations(images, ({ many }) => ({
   variants: many(imageVariants),
 }));
@@ -195,6 +211,7 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
 
 export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferSelect;
+export type Document = typeof documents.$inferSelect;
 export type ImageVariant = typeof imageVariants.$inferSelect;
 export type NewImageVariant = typeof imageVariants.$inferInsert;
 export type User = typeof user.$inferSelect;

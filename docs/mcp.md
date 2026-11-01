@@ -99,8 +99,11 @@ DELETE /api/user/api-keys/:id
 | `get_image` | Retrieve metadata, direct URLs, variants, and optional base64 image/poster content | `id`, `variant` (`original`, `thumbnail`, `card`, `tablet`, `social`, `poster`), `includeImageData` (boolean) |
 | `list_images` | List your private images with pagination | `limit` (default 20, max 100), `offset` (default 0) |
 | `delete_image` | Delete an image/video and its variants | `id`, `deleteToken` (not required if you are the owner) |
-| `request_upload_url` | Generate a signed, single-use upload ticket and curl command for direct container/sandbox image or video uploads (Claude Web, code execution sandboxes) | `filename`, `altName`, `mediaType` (`image`, `video`), `mode`, `quality`, `transcode`, `expiresInMinutes` |
-| `claim_upload_ticket` | Retrieve hosted URLs, markdown embed code, HTML5 video/picture markup, and metadata using a ticket ID | `ticketId` |
+| `request_upload_url` | Generate a signed, single-use upload ticket and curl command for direct container/sandbox image, video or PDF uploads (Claude Web, code execution sandboxes) | `filename`, `altName`, `mediaType` (`image`, `video`, `document`), `visibility` (documents), `mode`, `quality`, `transcode`, `expiresInMinutes` |
+| `get_document` | Metadata + a fresh signed URL that expires for a PDF document | `id`, `expiresInHours` (default 168, max 720) |
+| `list_documents` | List your private PDF documents (metadata only) | `limit`, `offset` |
+| `delete_document` | Delete a PDF document and its stored file | `id` |
+| `claim_upload_ticket` | Retrieve hosted URLs, markdown embed code, HTML5 video/picture markup, and metadata using a ticket ID. For PDF documents, returns a signed URL that expires | `ticketId`, `expiresInHours` (documents) |
 
 ### 2. Resources
 - `dropimg://images/{id}`: Direct metadata and variant links for an image asset.
@@ -119,6 +122,18 @@ When interacting with Claude Web or environments that generate images inside a s
    - DropImg generates an HMAC-SHA256 signed, single-use ticket URL (`/api/upload/direct?ticket=...`).
    - Claude executes `curl -s -X POST -F "file=@screenshot.png" "<uploadUrl>"` in its container.
    - The image is processed, assigned to your private gallery, and returns Markdown and URLs directly to Claude without passing image bytes through the LLM context.
+
+---
+
+## PDF Documents (private, expiring links)
+
+`request_upload_url({ filename: "SOW.pdf", mediaType: "document" })` (or any `.pdf` filename) uploads a PDF:
+
+- **Validated by content**: the file must start with `%PDF-`; extension and Content-Type are not trusted. Max size `MAX_DOCUMENT_UPLOAD_MB` (default 50). Stored byte-for-byte, original filename kept.
+- **Private by default**: no permanent public URL, never listed in galleries, owner/admin only. `visibility: "public"` additionally gives a permanent unsigned URL.
+- **Expiring links**: `claim_upload_ticket` and `get_document` return `/d/<id>/<expires>/<signature>/<name>` URLs (default 7 days, `expiresInHours` up to 720). After expiry the link returns 403; call `get_document` for a fresh one.
+- **Served from the CDN host** (`DOCUMENT_BASE_URL`, defaults to `CDN_URL`) as `application/pdf`, `nosniff`, `Content-Disposition: inline`, `Cache-Control: private, no-store`. Documents are never reachable through `/raw/`.
+- `delete_document` (or `delete_image`) removes the stored file and the record.
 
 ---
 

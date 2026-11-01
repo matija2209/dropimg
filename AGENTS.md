@@ -88,6 +88,12 @@ External AI agents authenticate via standard OAuth 2.0 discovery and authorizati
 - **`claim_upload_ticket`**:
   - Inputs: `ticketId`.
   - Retrieves hosted URLs, markdown embed code, HTML5 `<video>` or `<picture>` markup, and variant/poster details.
+- **PDF documents** (`request_upload_url` with `mediaType: "document"` or a `.pdf` filename):
+  - Private by default, stored byte-for-byte, validated by `%PDF-` magic bytes, max `MAX_DOCUMENT_UPLOAD_MB` (50).
+  - Stored in the separate `documents` table (never in `images`), key `documents/<random>.pdf`; `/raw/` refuses that prefix.
+  - `claim_upload_ticket({ ticketId, expiresInHours? })` / **`get_document`** `({ id, expiresInHours? })` return a signed `/d/<id>/<exp>/<sig>/<name>` URL on `DOCUMENT_BASE_URL` (default 7 days, max 30). Expired → 403, deleted → 404.
+  - **`list_documents`**, **`delete_document`** (also reachable via `list_images({ mediaType: "document" })` and `delete_image`).
+  - Code: `services/documents.ts`, `routes/documents.ts`, document branch in `routes/direct-upload.ts`.
 
 ### Resources & Prompts
 - **Resource `dropimg://images/{id}`**: Direct JSON metadata, variant links, and dimensions.

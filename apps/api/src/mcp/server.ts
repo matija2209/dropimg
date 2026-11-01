@@ -1,7 +1,7 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { eq, desc, isNull } from 'drizzle-orm';
+import { eq, desc, isNull, and } from 'drizzle-orm';
 import sharp from 'sharp';
 
 import { db } from '../db/client.js';
@@ -19,6 +19,14 @@ import {
   ImageProcessingError,
 } from '../services/image-processing.js';
 import { isVideoMime, mimeFromFileName } from '../lib/file-mime.js';
+import {
+  deleteDocument,
+  findDocumentForCaller,
+  isPdfFileName,
+  listDocumentsForCaller,
+  serializeDocument,
+  type DocumentCaller,
+} from '../services/documents.js';
 import { processVideo, VideoProcessingError } from '../services/video-processing.js';
 import type { ResolvedMcpIdentity } from '../lib/mcp-auth.js';
 
@@ -76,6 +84,43 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
   const callerUser = context?.authInfo?.user || context?.user;
   const isAdmin = Boolean(context?.authInfo?.isAdmin || context?.isAdmin || callerUser?.role === 'admin');
 
+  const documentCaller: DocumentCaller = { id: callerUser?.id ?? null, isAdmin };
+
+  const listDocumentsResult = async (limit: number, offset: number): Promise<CallToolResult> => {
+    const rows = await listDocumentsForCaller(documentCaller, { limit, offset });
+    const items = rows.map((doc) => serializeDocument(doc, { withUrl: false }));
+    const lines = items
+      .map((d) => `- **\`${d.id}\`**: ${d.originalFilename} (${(d.size / 1024).toFixed(1)} KB, ${d.pageCount ?? '?'} pages, ${d.visibility})`)
+      .join('\n');
+    return {
+      content: [
+        {
+          type: 'text',
+          text: items.length > 0
+            ? `Found ${items.length} documents (offset ${offset}):\n\n${lines}\n\nCall get_document with an id to get a signed link that expires.`
+            : 'No documents found.',
+        },
+      ],
+      structuredContent: { count: items.length, offset, limit, documents: items },
+    };
+  };
+
+  const deleteDocumentResult = async (id: string): Promise<CallToolResult> => {
+    const doc = await findDocumentForCaller(id, documentCaller);
+    if (!doc) {
+      return { isError: true, content: [{ type: 'text', text: `Document not found: ${id}` }] };
+    }
+    try {
+      await deleteDocument(doc);
+    } catch (error) {
+      return { isError: true, content: [{ type: 'text', text: `Failed to delete document ${id}: ${(error as Error).message}` }] };
+    }
+    return {
+      content: [{ type: 'text', text: `Document ${id} deleted: the stored file is removed and all its links no longer work.` }],
+      structuredContent: { success: true, id },
+    };
+  };
+
   const server = new McpServer(
     { name: 'dropimg', version: '1.0.0' },
     {
@@ -85,7 +130,11 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
         prompts: { listChanged: true },
       },
       instructions:
-        'DropImg MCP Server: Host, process, optimize, retrieve, and delete images with automatic responsive variants, private gallery isolation, and markdown generation. When an image exists in your local container, sandbox, or filesystem, call request_upload_url to generate a signed direct upload URL and upload it with curl instead of generating massive base64 text.',
+        'DropImg MCP Server: Host, process, optimize, retrieve, and delete images, videos and PDF documents. Images and videos get automatic responsive variants, private gallery isolation, and markdown generation. ' +
+        'When a file exists in your local container, sandbox, or filesystem, call request_upload_url to generate a signed direct upload URL and upload it with curl instead of generating massive base64 text. ' +
+        'PDF documents (request_upload_url with mediaType "document", or any .pdf filename) are PRIVATE by default and stored exactly as uploaded: they have no permanent public URL, never appear in public galleries, and are shared only through signed links that EXPIRE (default 7 days, up to 30). ' +
+        'After uploading a PDF, call claim_upload_ticket to get its link; when a link has expired or you need a new one, call get_document with the document id (and optional expiresInHours). Use list_documents to find documents and delete_document (or delete_image) to remove one and its stored file. ' +
+        'Treat document links as secrets: share them only with the people who should read the document.',
     }
   );
 
@@ -601,6 +650,10 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
       }
 
       if (!image) {
+        const doc = await findDocumentForCaller(id, documentCaller);
+        if (doc) {
+          return documentResult(`Document \`${doc.id}\` (documents are returned by get_document)`, serializeDocument(doc));
+        }
         return {
           isError: true,
           content: [{ type: 'text', text: `Image not found: ${id}` }],
@@ -625,23 +678,32 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     'list_images',
     {
       title: 'List Images',
-      description: 'Lists images on DropImg with pagination, dimensions, and URLs. Scoped to the authenticated user.',
+      description: 'Lists images and videos on DropImg with pagination, dimensions, and URLs. Scoped to the authenticated user. Pass mediaType "document" to list private PDF documents instead.',
       inputSchema: z.object({
         limit: z.number().int().min(1).max(100).optional().default(20).describe('Maximum number of images to return.'),
         offset: z.number().int().min(0).optional().default(0).describe('Pagination offset.'),
+        mediaType: z
+          .enum(['image', 'video', 'document'])
+          .optional()
+          .describe('Optional filter by media type. "document" lists your private PDF documents (same as list_documents). Omit to list images and videos.'),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ limit = 20, offset = 0 }): Promise<CallToolResult> => {
+    async ({ limit = 20, offset = 0, mediaType }): Promise<CallToolResult> => {
+      if (mediaType === 'document') {
+        return listDocumentsResult(limit, offset);
+      }
+
       // Privacy scoping:
       // - Admins/Master see all
       // - Authenticated users see ONLY their own images
       // - Anonymous/Public see ONLY images without owner
-      const whereClause = isAdmin
+      const ownerClause = isAdmin
         ? undefined
         : callerUser
           ? eq(images.userId, callerUser.id)
           : isNull(images.userId);
+      const whereClause = mediaType ? and(ownerClause, eq(images.mediaType, mediaType)) : ownerClause;
 
       const rows = await db.query.images.findMany({
         where: whereClause,
@@ -701,7 +763,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     'delete_image',
     {
       title: 'Delete Image',
-      description: 'Deletes an image and its responsive variants from DropImg.',
+      description: 'Deletes an image, video, or PDF document (by id) from DropImg, including its variants and stored file.',
       inputSchema: z.object({
         id: z.string().describe('The unique image ID to delete.'),
         deleteToken: z
@@ -718,6 +780,10 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
       });
 
       if (!image) {
+        // PDF documents live in their own table; delete_image works for them too.
+        if (await findDocumentForCaller(id, documentCaller)) {
+          return deleteDocumentResult(id);
+        }
         return {
           isError: true,
           content: [{ type: 'text', text: `Image not found: ${id}` }],
@@ -761,7 +827,8 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     {
       title: 'Request Direct Upload URL',
       description:
-        'Generates a signed, temporary direct upload URL and curl command to upload an image or video directly from your local sandbox container or terminal. Use this when you have a file inside your Claude sandbox, container, or terminal, avoiding large base64 tokens in chat context.',
+        'Generates a signed, temporary direct upload URL and curl command to upload an image, video, or PDF document directly from your local sandbox container or terminal. Use this when you have a file inside your Claude sandbox, container, or terminal, avoiding large base64 tokens in chat context. ' +
+        'To upload a PDF pass mediaType "document" (or a filename ending in .pdf): documents are stored exactly as uploaded, are PRIVATE by default (no permanent public URL, never in public galleries), and are shared through signed links that EXPIRE (default 7 days). After running the curl command, call claim_upload_ticket to get the link; call get_document later for a fresh link when it expires.',
       inputSchema: z.object({
         filename: z
           .string()
@@ -772,9 +839,13 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
           .optional()
           .describe('Optional descriptive title or alt text for the media.'),
         mediaType: z
-          .enum(['image', 'video'])
+          .enum(['image', 'video', 'document'])
           .optional()
-          .describe('Media type: "image" or "video". If omitted, inferred automatically from filename extension (e.g. .mp4, .mov, .webm).'),
+          .describe('Media type: "image", "video", or "document" (PDF only; private, expiring links). If omitted, inferred from the filename extension (e.g. .mp4, .mov, .webm, .pdf).'),
+        visibility: z
+          .enum(['private', 'public'])
+          .optional()
+          .describe('Documents only. "private" (default) returns expiring signed links only; "public" additionally gets a permanent unsigned URL. Ignored for images and videos.'),
         mode: z
           .enum(uploadModes)
           .optional()
@@ -805,7 +876,7 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
-    async ({ filename, altName, mediaType, mode, quality, transcode = false, expiresInMinutes }): Promise<CallToolResult> => {
+    async ({ filename, altName, mediaType, visibility, mode, quality, transcode = false, expiresInMinutes }): Promise<CallToolResult> => {
       const userId = callerUser?.id || (config.publicMode ? 'anonymous' : null);
       if (!userId) {
         return {
@@ -816,6 +887,66 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
               text: 'Authentication required: You must be authenticated to request a direct upload URL.',
             },
           ],
+        };
+      }
+
+      const toolError = (text: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text }] });
+
+      const isDocument = mediaType === 'document' || (!mediaType && isPdfFileName(filename));
+      if (!isDocument && mediaType && isPdfFileName(filename)) {
+        return toolError(`"${filename}" is a PDF, but mediaType is "${mediaType}". Use mediaType "document" to upload PDFs.`);
+      }
+
+      if (isDocument) {
+        if (!callerUser?.id) {
+          return toolError('Authentication required: documents are private and can only be uploaded by an authenticated user.');
+        }
+        if (filename && !isPdfFileName(filename)) {
+          return toolError(`Documents must be PDFs: filename "${filename}" does not end in .pdf.`);
+        }
+        if ((mode && mode !== 'upload') || quality !== undefined || transcode) {
+          return toolError('The image options (mode, quality) and video option (transcode) do not apply to documents; PDFs are stored exactly as uploaded. Remove them and try again.');
+        }
+
+        const docFilename = filename || 'document.pdf';
+        const { ticket, ticketId, expiresAt } = createUploadTicket({
+          userId,
+          filename: docFilename,
+          altName,
+          mediaType: 'document',
+          visibility: visibility || 'private',
+          expiresInSeconds: (expiresInMinutes || 15) * 60,
+        });
+
+        const uploadUrl = `${config.publicBaseUrl.replace(/\/$/, '')}/api/upload/direct?ticket=${ticket}`;
+        const curlCommand = `curl -s -X POST -F "file=@${docFilename}" "${uploadUrl}"`;
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                `Direct Upload URL generated successfully!\n\n` +
+                `- **Ticket ID**: \`${ticketId}\`\n` +
+                `- **Media Type**: \`document\` (PDF, ${visibility || 'private'})\n` +
+                `- **Max size**: ${config.maxDocumentUploadMb}MB\n` +
+                `- **Expires At**: ${expiresAt.toISOString()}\n\n` +
+                `**Execute this command in your sandbox/container shell**:\n` +
+                `\`\`\`bash\n${curlCommand}\n\`\`\`\n\n` +
+                `The file is validated by content (it must start with %PDF-). Then call claim_upload_ticket with this ticket ID to get a signed link that expires (default ${Math.round(config.documentUrlDefaultHours / 24)} days). Use get_document later for a fresh link.`,
+            },
+          ],
+          structuredContent: {
+            uploadUrl,
+            ticketId,
+            mediaType: 'document',
+            visibility: visibility || 'private',
+            maxSizeMb: config.maxDocumentUploadMb,
+            expiresAt: expiresAt.toISOString(),
+            curlCommand,
+            instructions:
+              'Run the curl command in your sandbox/container shell. Then call claim_upload_ticket with the ticketId to receive a signed document URL that expires; call get_document for a fresh link later.',
+          },
         };
       }
 
@@ -874,13 +1005,20 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
     {
       title: 'Claim Upload Ticket Result',
       description:
-        'Retrieves the hosted image URLs, markdown embed code, and metadata for an image uploaded via a direct upload ticket.',
+        'Retrieves the hosted URLs, embed code, and metadata for an image, video, or PDF document uploaded via a direct upload ticket. For documents this returns a signed URL that EXPIRES (default 7 days, set expiresInHours up to 720); the document itself has no permanent public URL.',
       inputSchema: z.object({
         ticketId: z.string().describe('The ticket ID returned by request_upload_url.'),
+        expiresInHours: z
+          .number()
+          .int()
+          .min(1)
+          .max(config.documentUrlMaxHours)
+          .optional()
+          .describe(`Documents only: how long the signed link stays valid, in hours (default ${config.documentUrlDefaultHours}, maximum ${config.documentUrlMaxHours} = 30 days).`),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ ticketId }): Promise<CallToolResult> => {
+    async ({ ticketId, expiresInHours }): Promise<CallToolResult> => {
       const result = getTicketResult(ticketId);
       if (!result) {
         return {
@@ -892,6 +1030,18 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
             },
           ],
         };
+      }
+
+      if (result.mediaType === 'document') {
+        const doc = await findDocumentForCaller(String(result.id), documentCaller);
+        // A ticket result belongs to the uploader (or an admin); anyone else sees "not found".
+        if (!doc) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: `No upload found for ticket ID "${ticketId}". The document may have been deleted, or the ticket belongs to another user.` }],
+          };
+        }
+        return documentResult(`Document details for ticket \`${ticketId}\``, serializeDocument(doc, { expiresInHours }));
       }
 
       const isVideo = result.mediaType === 'video';
@@ -916,6 +1066,65 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
         structuredContent: result,
       };
     }
+  );
+
+  // 6b. Tool: get_document
+  server.registerTool(
+    'get_document',
+    {
+      title: 'Get Document',
+      description:
+        'Returns metadata (filename, size, page count, visibility, created at) for a PDF document and a FRESH signed URL that expires. Use this whenever a previous link has expired or you need a new link for an existing document. Default expiry 7 days, maximum 30 days (expiresInHours).',
+      inputSchema: z.object({
+        id: z.string().describe('The document ID (starts with "doc_"), as returned by claim_upload_ticket or list_documents.'),
+        expiresInHours: z
+          .number()
+          .int()
+          .min(1)
+          .max(config.documentUrlMaxHours)
+          .optional()
+          .describe(`How long the new signed link stays valid, in hours (default ${config.documentUrlDefaultHours} = 7 days, maximum ${config.documentUrlMaxHours} = 30 days).`),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id, expiresInHours }): Promise<CallToolResult> => {
+      const doc = await findDocumentForCaller(id, documentCaller);
+      if (!doc) {
+        return { isError: true, content: [{ type: 'text', text: `Document not found: ${id}` }] };
+      }
+      return documentResult(`Document \`${doc.id}\``, serializeDocument(doc, { expiresInHours }));
+    }
+  );
+
+  // 6c. Tool: list_documents
+  server.registerTool(
+    'list_documents',
+    {
+      title: 'List Documents',
+      description:
+        'Lists PDF documents owned by the authenticated user (metadata only, newest first). Documents are private and never appear in public galleries. Signed links are not included in the list; call get_document with an id to get a fresh expiring link.',
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(100).optional().default(20).describe('Maximum number of documents to return.'),
+        offset: z.number().int().min(0).optional().default(0).describe('Pagination offset.'),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ limit = 20, offset = 0 }): Promise<CallToolResult> => listDocumentsResult(limit, offset)
+  );
+
+  // 6d. Tool: delete_document
+  server.registerTool(
+    'delete_document',
+    {
+      title: 'Delete Document',
+      description:
+        'Permanently deletes a PDF document: removes the stored file and its record, so every signed link stops working. Only the owner (or an admin) can delete a document.',
+      inputSchema: z.object({
+        id: z.string().describe('The document ID to delete.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async ({ id }): Promise<CallToolResult> => deleteDocumentResult(id)
   );
 
   // 7. MCP Resource: dropimg://images/{id}
@@ -985,6 +1194,31 @@ export function buildDropImgServer(context?: McpServerContext | any): McpServer 
   );
 
   return server;
+}
+
+type SerializedDocument = ReturnType<typeof serializeDocument>;
+
+function documentResult(title: string, doc: SerializedDocument): CallToolResult {
+  const withUrl = 'url' in doc ? doc : undefined;
+  const lines = [
+    `${title}:`,
+    '',
+    `- **ID**: \`${doc.id}\``,
+    `- **Filename**: ${doc.originalFilename}`,
+    `- **Size**: ${doc.size} bytes (${(doc.size / 1024).toFixed(1)} KB)`,
+    `- **Pages**: ${doc.pageCount ?? 'unknown'}`,
+    `- **Visibility**: ${doc.visibility}`,
+    `- **Created**: ${doc.createdAt}`,
+  ];
+  if (withUrl) {
+    lines.push(
+      `- **Signed URL** (opens inline as PDF): ${withUrl.url}`,
+      `- **URL expires**: ${withUrl.urlExpiresAt} (in ${withUrl.urlExpiresInHours}h). After this the link returns 403; call get_document for a fresh one.`
+    );
+    if ('permanentUrl' in withUrl) lines.push(`- **Permanent public URL**: ${withUrl.permanentUrl}`);
+    else lines.push('- **Public URL**: none (private document; share only the expiring signed URL)');
+  }
+  return { content: [{ type: 'text', text: lines.join('\n') }], structuredContent: doc };
 }
 
 async function handleGetImage(

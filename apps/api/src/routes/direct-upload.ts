@@ -13,6 +13,12 @@ import {
 } from '../services/image-processing.js';
 import { processVideo, VideoProcessingError } from '../services/video-processing.js';
 import {
+  DocumentError,
+  maxDocumentBytes,
+  serializeDocument,
+  storeDocument,
+} from '../services/documents.js';
+import {
   verifyAndConsumeUploadTicket,
   storeTicketResult,
   getTicketResult,
@@ -88,6 +94,15 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
   }
 
   const { payload } = verification;
+  const isDocumentTicket = payload.mediaType === 'document';
+
+  // Reject oversized documents before buffering the body (a missing/lying header is still caught after reading).
+  if (isDocumentTicket) {
+    const declaredLength = Number.parseInt(c.req.header('content-length') || '', 10);
+    if (Number.isFinite(declaredLength) && declaredLength > maxDocumentBytes() + 1024 * 1024) {
+      return c.json({ error: `File size exceeds ${config.maxDocumentUploadMb}MB document limit.` }, 413);
+    }
+  }
 
   // 3. Extract File from Multipart Form or Raw Binary Body
   const contentType = c.req.header('content-type') || '';
@@ -137,6 +152,44 @@ directUpload.on(['POST', 'PUT'], '/', async (c) => {
 
   if (buffer.length === 0) {
     return c.json({ error: 'Uploaded file is empty.' }, 400);
+  }
+
+  if (isDocumentTicket) {
+    // Documents are stored exactly as uploaded; image/video options on the ticket do not apply.
+    if (!payload.userId || payload.userId === 'anonymous') {
+      return c.json({ error: 'Documents can only be uploaded by an authenticated user.' }, 401);
+    }
+
+    try {
+      const doc = await storeDocument({
+        buffer,
+        filename: fileName.endsWith('.bin') ? payload.filename : fileName,
+        altName,
+        userId: payload.userId,
+        visibility: payload.visibility === 'public' ? 'public' : 'private',
+        source: 'mcp-direct',
+      });
+
+      // The ticket-status cache is readable with just the ticketId, so it never holds a download link;
+      // claim_upload_ticket mints a fresh signed link for the authenticated owner instead.
+      storeTicketResult(payload.ticketId, {
+        ...serializeDocument(doc, { withUrl: false }),
+        userId: payload.userId,
+        ticketId: payload.ticketId,
+      });
+
+      return c.json(
+        { ...serializeDocument(doc), userId: payload.userId, ticketId: payload.ticketId },
+        201,
+        { 'Cache-Control': 'no-store' }
+      );
+    } catch (error) {
+      if (error instanceof DocumentError) {
+        return c.json({ error: error.message }, error.statusCode);
+      }
+      console.error('[direct-upload] Document upload error:', error);
+      return c.json({ error: 'Failed to store document' }, 500);
+    }
   }
 
   const fileExtMime = fileName ? mimeFromFileName(fileName) : undefined;

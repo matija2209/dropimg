@@ -14,6 +14,11 @@ export const config = {
   uploadDir: process.env.UPLOAD_DIR || 'data/uploads',
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '20', 10),
   maxVideoUploadMb: parseInt(process.env.MAX_VIDEO_UPLOAD_MB || '500', 10),
+  maxDocumentUploadMb: parseInt(process.env.MAX_DOCUMENT_UPLOAD_MB || '50', 10),
+  // Host that serves documents; must not be the app's own domain (PDFs can carry scripts).
+  documentBaseUrl: (process.env.DOCUMENT_BASE_URL || process.env.CDN_URL || process.env.PUBLIC_CDN_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  documentUrlDefaultHours: 24 * 7,
+  documentUrlMaxHours: 24 * 30,
   videoUploadsEnabled: process.env.VIDEO_UPLOADS_ENABLED !== 'false',
   videoTranscodeEnabled: process.env.VIDEO_TRANSCODE_ENABLED === 'true',
   chunkSizeBytes: parseInt(process.env.CHUNK_SIZE_BYTES || String(8 * 1024 * 1024), 10),

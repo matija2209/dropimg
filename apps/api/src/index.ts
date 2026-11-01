@@ -11,12 +11,14 @@ import serviceImageUpload from './routes/service-image-upload.js';
 import mcpRoute from './mcp/routes.js';
 import apiKeysRoute from './routes/api-keys.js';
 import llmsRoute from './routes/llms-txt.js';
+import documentsRoute from './routes/documents.js';
 import { serveRangedFile } from './lib/range-response.js';
 import { db } from './db/client.js';
 import { images } from './db/schema.js';
 import { eq } from 'drizzle-orm';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { readFile } from 'node:fs/promises';
+import { posix } from 'node:path';
 import { auth } from './lib/auth.js';
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from 'better-auth/plugins';
 import { authMiddleware, adminMiddleware } from './lib/middleware.js';
@@ -103,6 +105,9 @@ app.get('/.well-known/oauth-protected-resource/*', handlePrm);
 // LLMs and Agent API documentation standard
 app.route('/', llmsRoute);
 
+// Private PDF documents: signed, expiring links (served from the CDN host)
+app.route('/', documentsRoute);
+
 // Public API routes
 app.route('/api/images', imagesRoute);
 
@@ -141,6 +146,11 @@ app.get('/api/admin/status', authMiddleware, adminMiddleware, (c) => {
 app.get('/raw/*', async (c) => {
   const filename = decodeURIComponent(c.req.path.replace(/^\/raw\//, ''));
 
+  // Documents are private; they are only reachable through signed /d/ links.
+  if (filename.split('/').includes('..') || posix.normalize(filename).startsWith('documents/')) {
+    return c.notFound();
+  }
+
   try {
     const image = await db.query.images.findFirst({
       where: eq(images.filename, filename),
@@ -175,7 +185,7 @@ app.use('/*', serveStatic({ root: './public' }));
 
 // SPA Fallback: Serve index.html for any non-API GET requests that reach this point
 app.notFound(async (c) => {
-  if (c.req.method === 'GET' && !c.req.path.startsWith('/api/') && !c.req.path.startsWith('/raw/')) {
+  if (c.req.method === 'GET' && !c.req.path.startsWith('/api/') && !c.req.path.startsWith('/raw/') && !c.req.path.startsWith('/d/')) {
     try {
       const html = await readFile('./public/index.html', 'utf-8');
       return c.html(html);

@@ -13,6 +13,7 @@ export function generateLlmsTxt(baseUrl: string): string {
 - **Images**: Upload PNG, JPEG, WebP, GIF. Auto-generates responsive variants (thumbnail, card, tablet, social), responsive HTML <picture> markup, and Markdown embeds.
 - **Videos**: Upload MP4, WebM, MOV, MKV. Extracts WebP poster frames via FFmpeg, probes dimensions and duration, supports HTTP 206 Partial Content range streaming for HTML5 video playback.
 - **AI Agents & MCP**: Native Model Context Protocol server over HTTP SSE / Streamable HTTP with OAuth 2.0 PKCE discovery and Personal API Keys.
+- **PDF Documents**: Upload PDFs (\`mediaType: "document"\`). Documents are private by default, stored exactly as uploaded, never listed in galleries, and shared only through signed links that expire (default 7 days, max 30).
 - **Container / Sandbox Uploads**: Signed single-use tickets allowing sandboxed agents (Claude Web, code execution bash containers) to upload local files directly via curl without transmitting heavy base64 strings through chat context.
 
 ## AI Agent Integration (MCP)
@@ -23,8 +24,10 @@ export function generateLlmsTxt(baseUrl: string): string {
 - **Key MCP Tools**:
   - \`upload_image\`: Host images from base64 or remote URL (supports background removal and compression).
   - \`upload_video\`: Host MP4/WebM videos from base64 or remote URL (extracts poster frame and duration).
-  - \`request_upload_url\`: Generates signed ticket and curl command for container/sandbox files.
-  - \`claim_upload_ticket\`: Retrieves hosted URLs and HTML5 video/picture markup after curl upload.
+  - \`request_upload_url\`: Generates signed ticket and curl command for container/sandbox files (images, videos, and PDFs via \`mediaType: "document"\`).
+  - \`claim_upload_ticket\`: Retrieves hosted URLs and HTML5 video/picture markup after curl upload; for PDFs returns a signed URL that expires.
+  - \`get_document\`: Fresh expiring signed URL (and metadata) for an existing PDF document.
+  - \`list_documents\` / \`delete_document\`: List and delete your private PDF documents.
   - \`get_image\`: Inspect metadata, direct URLs, variants, and optional base64 image/poster data for multimodal LLMs.
   - \`list_images\`: Scoped private gallery listing.
   - \`delete_image\`: Removes asset and variants.
@@ -118,7 +121,8 @@ Transport: HTTP SSE / Streamable HTTP (or stdio via \`npm run mcp:stdio --worksp
 - Parameters:
   - \`filename\`: string (e.g. "screenshot.png", "clip.mp4") [Optional]
   - \`altName\`: string [Optional]
-  - \`mediaType\`: \`'image' | 'video'\` [Optional, auto-inferred from filename extension]
+  - \`mediaType\`: \`'image' | 'video' | 'document'\` [Optional, auto-inferred from filename extension; \`document\` = PDF only]
+  - \`visibility\`: \`'private' | 'public'\` [Documents only, default \`private\`]
   - \`mode\`: \`'upload' | 'compress-jpg' | 'png-to-jpg' | 'strip-metadata' | 'remove-background'\`
   - \`quality\`: integer (1-100)
   - \`transcode\`: boolean
@@ -128,7 +132,18 @@ Transport: HTTP SSE / Streamable HTTP (or stdio via \`npm run mcp:stdio --worksp
 ### Tool: \`claim_upload_ticket\`
 - Parameters:
   - \`ticketId\`: string (e.g. "tkt_...")
-- Returns: Complete hosted asset metadata and embed codes once the curl upload completes.
+  - \`expiresInHours\`: integer 1-720 [Documents only, default 168 = 7 days]
+- Returns: Complete hosted asset metadata and embed codes once the curl upload completes. For PDF documents: metadata plus a signed \`url\` and \`urlExpiresAt\`.
+
+### Tool: \`get_document\`
+- Parameters:
+  - \`id\`: string (document id, "doc_...")
+  - \`expiresInHours\`: integer 1-720 [Optional, default 168]
+- Returns: \`id\`, \`originalFilename\`, \`size\`, \`pageCount\`, \`visibility\`, \`createdAt\`, signed \`url\`, \`urlExpiresAt\`. Use it whenever a link has expired.
+
+### Tool: \`list_documents\` / \`delete_document\`
+- \`list_documents\`: \`limit\`, \`offset\`; metadata only (no links). \`list_images\` also accepts \`mediaType: "document"\`.
+- \`delete_document\`: \`id\`; removes the stored file so all links stop working (\`delete_image\` works for documents too).
 
 ### Tool: \`get_image\`
 - Parameters:
@@ -154,6 +169,7 @@ Transport: HTTP SSE / Streamable HTTP (or stdio via \`npm run mcp:stdio --worksp
 - \`GET /api/images/:id/file/:variant\`: Delivers specific image or video variant (\`original\`, \`thumbnail\`, \`card\`, \`tablet\`, \`social\`, \`poster\`).
 - \`GET /api/images/:id/base64/:variant\`: Returns JSON with base64 Data URL for image variants.
 - \`DELETE /api/images/:id?token=<deleteToken>\`: Public deletion endpoint with delete token.
+- \`GET /d/:id/:expires/:signature/:filename\`: Signed PDF document link (served from the CDN host with \`Content-Type: application/pdf\`, \`X-Content-Type-Options: nosniff\`, \`Content-Disposition: inline\`). Returns 403 after expiry. Documents are never served from \`/raw/\`.
 `;
 }
 

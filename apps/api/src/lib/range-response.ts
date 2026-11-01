@@ -34,6 +34,8 @@ export async function serveRangedFile(
     storageKey: string;
     mimeType: string;
     fileSize?: number;
+    /** Overrides the default (public, immutable) response headers. */
+    headers?: Record<string, string>;
   }
 ): Promise<Response> {
   const rangeHeader = c.req.header('range');
@@ -47,6 +49,7 @@ export async function serveRangedFile(
         'Content-Type': input.mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',
         ...(totalSize !== null ? { 'Content-Length': String(totalSize) } : {}),
+        ...input.headers,
       },
     });
   }
@@ -55,6 +58,7 @@ export async function serveRangedFile(
   if (!range) {
     return c.body(null, 416, {
       'Content-Range': `bytes */${totalSize}`,
+      ...input.headers,
     });
   }
 
@@ -69,6 +73,7 @@ export async function serveRangedFile(
       'Content-Length': String(chunkSize),
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'public, max-age=31536000, immutable',
+      ...input.headers,
     },
   });
 }
