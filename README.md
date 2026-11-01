@@ -100,6 +100,8 @@ To update DropImg to the latest version while preserving your data:
 - **S3-Compatible Storage:** Built-in integration with [Garage](https://garagehq.deuxfleurs.fr/).
 - **SQLite + Drizzle:** Zero-config metadata storage with automatic migrations and ownership tracking.
 - **Proxied Serving:** Clean URLs (`/raw/:id`) and private S3 bucket support. Direct URLs remain public for easy sharing.
+- **CDN Delivery:** Set `CDN_URL` and raw media URLs, embeds and responsive `<picture>` markup are served from your CDN host.
+- **Private PDF Documents:** Upload PDFs that stay private and are shared through expiring signed links, served from the CDN host.
 - **Model Context Protocol (MCP) Server:** Native MCP support for Claude Desktop, Cursor, and remote AI tools to upload, retrieve, list, and embed images. See [MCP Documentation](docs/mcp.md).
 
 ---
@@ -220,7 +222,11 @@ Environment variables can be managed in `docker-compose.yml` or a `.env` file.
 | `PORT` | Internal API port | `3000` |
 | `APP_URL` | Full URL of the application | `http://localhost:12312` |
 | `STORAGE_DRIVER` | `local` or `s3` | `s3` |
+| `PUBLIC_BASE_URL` | Public URL used to build asset links when no CDN is set | `http://localhost:3000` |
+| `CDN_URL` | CDN host (e.g. a Bunny.net Pull Zone) used for raw media URLs, embeds and documents. Falls back to `PUBLIC_BASE_URL` | `` |
 | `MAX_UPLOAD_MB` | Max file size in megabytes | `20` |
+| `MAX_DOCUMENT_UPLOAD_MB` | Max PDF document size in megabytes | `50` |
+| `DOCUMENT_BASE_URL` | Host that serves PDF documents. Falls back to `CDN_URL`; must not be the app's own domain in production | `` |
 | `PUBLIC_MODE` | If `true`, disables mandatory authentication (Backend) | `false` |
 | `VITE_PUBLIC_MODE` | If `true`, hides auth UI elements (Frontend) | `false` |
 | `ADMIN_TOKEN` | Token for administrative tasks | `change-me` |
